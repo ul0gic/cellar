@@ -1,0 +1,52 @@
+:where(.cl-have-bar, cl-have-bar) {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+
+  &[stacked] {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  & [part~="cl-have-bar-bar"] {
+    display: inline-flex;
+    gap: var(--nudge);
+    align-items: center;
+  }
+
+  & [part~="cl-have-bar-bar"] > i {
+    width: var(--have-seg-w);
+    height: var(--have-seg-h);
+    border-radius: var(--nudge);
+    background: var(--glow);
+  }
+
+  & [part~="cl-have-bar-bar"] > i.is-via {
+    background: repeating-linear-gradient(135deg, var(--glow) 0 var(--nudge), transparent var(--nudge) var(--space-1));
+    box-shadow: inset 0 0 0 var(--ring-thin) var(--glow);
+  }
+
+  & [part~="cl-have-bar-bar"] > i.is-off {
+    background: transparent;
+    box-shadow: inset 0 0 0 var(--ring-thin) var(--bulb-off);
+  }
+
+  & [part~="cl-have-bar-text"].is-missing {
+    color: var(--danger);
+    font-weight: var(--weight-medium);
+  }
+
+  @media (forced-colors: active) {
+    & [part~="cl-have-bar-bar"] > i {
+      border: var(--ring-thin) solid CanvasText;
+    }
+    & [part~="cl-have-bar-bar"] > i.is-on {
+      background: Highlight;
+    }
+  }
+}

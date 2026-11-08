@@ -1,0 +1,219 @@
+:where(.lc-rating, lc-rating) {
+  --lc-rating-color: var(--glow);
+  --lc-rating-empty-color: var(--glow);
+  --cl-star: var(--star);
+
+  &[readonly] {
+    --cl-star: var(--star-sm);
+  }
+
+  .lc-rating__container {
+    gap: var(--nudge);
+
+    :where(lc-icon, .lc-icon) {
+      width: var(--cl-star);
+      height: var(--cl-star);
+      --lc-icon-size: var(--cl-star);
+    }
+
+    .lc-rating__star:focus-visible {
+      outline: var(--focus-ring) solid var(--focus);
+      outline-offset: var(--nudge);
+    }
+
+    .lc-rating__half {
+      width: calc(var(--cl-star) / 2);
+
+      & + .lc-rating__half :where(lc-icon, .lc-icon) {
+        margin-inline-start: calc(var(--cl-star) / -2);
+      }
+    }
+  }
+}
+
+:where(.lc-progress-bar, lc-progress-bar) {
+  --lc-progress-bar-height: var(--progress-h);
+  --lc-progress-bar-background: var(--surface-sunken);
+  --lc-progress-bar-border-radius: var(--radius-pill);
+  --lc-progress-bar-shadow: inset 0 0 0 var(--hairline) var(--line);
+  --lc-progress-bar-fill-background: linear-gradient(90deg, var(--brass), var(--glow));
+
+  &[size="sm"] {
+    --lc-progress-bar-sm-height: var(--progress-thin);
+  }
+
+  .progress-fill {
+    border-radius: inherit;
+    box-shadow: var(--glow-shadow-bar);
+  }
+
+  &[indeterminate] .progress-fill {
+    width: 36%;
+    animation-duration: var(--dur-loop);
+    animation-timing-function: linear;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &[indeterminate] .progress-fill {
+      width: 100%;
+      background-image: linear-gradient(90deg, var(--brass), var(--glow));
+    }
+  }
+}
+
+:where(.lc-clipboard, lc-clipboard) {
+  --lc-clipboard-gap: var(--space-2);
+  --lc-clipboard-copied-color: var(--accent-text);
+  --lc-clipboard-field-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+
+  .clipboard-button {
+    --lc-button-height: var(--target);
+    --lc-button-padding-x: var(--space-4);
+    --lc-button-background: var(--surface-raised);
+    --lc-button-color: var(--accent-text);
+    --lc-button-ghost-color: var(--accent-text);
+    --lc-button-border-radius: var(--radius-pill);
+    box-shadow: inset 0 0 0 var(--hairline) var(--line);
+    border-radius: var(--radius-pill);
+  }
+
+  &[icon-only] .clipboard-button {
+    --lc-button-padding-x: 0;
+    width: var(--target);
+  }
+
+  .clipboard-field {
+    flex-basis: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    color: var(--text);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: var(--text-sm);
+    user-select: all;
+    word-break: break-all;
+  }
+}
+
+:where(.lc-toast, lc-toast) {
+  --lc-toast-bottom: calc(var(--tabbar-h) + var(--space-3) + env(safe-area-inset-bottom, 0px));
+  --lc-toast-container-padding: 0 var(--gutter);
+  --lc-toast-min-width: calc(100vw - 2 * var(--gutter));
+  --lc-toast-max-width: calc(100vw - 2 * var(--gutter));
+  --lc-toast-padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  --lc-toast-content-gap: var(--space-3);
+  --lc-toast-background: var(--text);
+  --lc-toast-border-color: transparent;
+  --lc-toast-border-radius: var(--radius-md);
+  --lc-toast-shadow: var(--shadow-pop);
+  --lc-toast-title-color: var(--background);
+  --lc-toast-title-font-size: var(--text-md);
+  --lc-toast-title-font-weight: var(--weight-medium);
+  --lc-toast-message-color: var(--background);
+  --lc-toast-message-font-size: var(--text-md);
+  --lc-toast-close-color: var(--background);
+
+  & [part~="lc-toast-container"] {
+    z-index: var(--z-toast);
+  }
+
+  & [part~="lc-toast-toast"] {
+    align-items: center;
+    min-height: var(--row-min);
+    color: var(--background);
+    border-width: 0;
+    animation-duration: var(--dur-quick);
+  }
+
+  & [part~="lc-toast-icon"] {
+    display: none;
+  }
+
+  & [part~="lc-toast-content"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  & [part~="lc-toast-title"] {
+    margin-bottom: 0;
+  }
+
+  & [part~="lc-toast-tap"] {
+    min-height: var(--target);
+  }
+
+  & [part~="lc-toast-tap"] [part~="lc-toast-message"] {
+    font-weight: var(--weight-bold);
+    text-decoration: underline;
+  }
+
+  & [part~="lc-toast-close"] {
+    width: var(--target);
+    height: var(--target);
+    border-radius: 50%;
+    --lc-toast-close-hover-background: color-mix(in srgb, var(--background) 16%, transparent);
+    --lc-toast-close-hover-color: var(--background);
+  }
+
+  & [part~="lc-toast-toast"].toast-error {
+    --lc-toast-background: var(--danger);
+    --lc-toast-border-color: transparent;
+    --lc-toast-title-color: var(--surface-raised);
+    --lc-toast-message-color: var(--surface-raised);
+    --lc-toast-close-color: var(--surface-raised);
+    color: var(--surface-raised);
+    border-left-width: 0;
+  }
+
+  &[position="bottom-right"] {
+    --lc-toast-bottom: var(--space-6);
+    --lc-toast-container-padding: 0 var(--gutter-wide);
+    --lc-toast-min-width: var(--toast-w);
+    --lc-toast-max-width: var(--toast-w);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    & [part~="lc-toast-toast"] {
+      animation: none;
+    }
+  }
+}
+
+:where(.lc-bar-chart, lc-bar-chart) {
+  --lc-bar-chart-color: var(--brass);
+  --lc-bar-chart-current-color: var(--brass);
+  --lc-bar-chart-empty-color: var(--surface-sunken);
+  --lc-bar-chart-border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  --lc-bar-chart-value-color: var(--text);
+  --lc-bar-chart-label-color: var(--text-muted);
+  --lc-bar-chart-current-label-color: var(--text-muted);
+  --lc-bar-chart-gridline-color: var(--line-strong);
+
+  &[variant="secondary"] {
+    --lc-bar-chart-color: var(--accent);
+    --lc-bar-chart-current-color: var(--accent);
+  }
+
+  & .bar {
+    max-width: var(--bar-max);
+    margin-inline: auto;
+  }
+
+  & .bar-chart:not(.is-horizontal) {
+    border-bottom: var(--hairline) solid var(--line-strong);
+  }
+
+  & .bar-value {
+    font-size: var(--text-sm);
+  }
+
+  & .bar-label {
+    font-size: var(--text-xs);
+  }
+}

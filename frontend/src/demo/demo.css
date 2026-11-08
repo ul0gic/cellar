@@ -1,0 +1,61 @@
+.cl-demo {
+  display: grid;
+  gap: var(--space-6);
+
+  & h1,
+  & h2 {
+    margin: 0 0 var(--space-3);
+    font-family: var(--font-display);
+    font-weight: 400;
+  }
+
+  & section {
+    display: grid;
+    gap: var(--space-4);
+  }
+}
+
+.cl-demo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.cl-demo-col {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cl-demo-photo {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--tv-background);
+}
+
+.cl-demo-plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--space-3);
+
+  & cl-plate {
+    aspect-ratio: 4 / 5;
+    border-radius: var(--radius-lg);
+  }
+}
+
+.cl-demo-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-3);
+  max-width: 640px;
+}
+
+.cl-demo-offline {
+  position: relative;
+  min-height: 320px;
+
+  & .cl-launch-offline {
+    position: absolute;
+  }
+}

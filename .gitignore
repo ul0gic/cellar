@@ -1,0 +1,11 @@
+node_modules
+dist
+.rig
+catalog/out
+catalog/source
+contract/dist
+backend/generated
+*.log
+.playwright-mcp
+tests/fixtures/catalog-next
+tests/fixtures/archives/**/*.zip

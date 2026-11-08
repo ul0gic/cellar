@@ -1,0 +1,158 @@
+:where(.cl-recipe-card, cl-recipe-card) {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+
+  & [part~="cl-recipe-card-link"] {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    color: inherit;
+    text-decoration: none;
+    border-radius: inherit;
+  }
+
+  & [part~="cl-recipe-card-media"] {
+    position: relative;
+    display: block;
+    aspect-ratio: 4 / 5;
+  }
+
+  & [part~="cl-recipe-card-media"]::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 34%;
+    background: linear-gradient(180deg, var(--photo-fade), var(--surface));
+    pointer-events: none;
+  }
+
+  & [part~="cl-recipe-card-photo"] {
+    position: absolute;
+    inset: 0;
+  }
+
+  & [part~="cl-recipe-card-pill"] {
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-2);
+    z-index: 2;
+  }
+
+  & [part~="cl-recipe-card-body"] {
+    position: relative;
+    z-index: 1;
+    display: block;
+    margin-top: calc(-1 * var(--space-6));
+    padding: 0 var(--space-3) var(--space-3);
+  }
+
+  & [part~="cl-recipe-card-name"] {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: var(--text-xl);
+    line-height: var(--leading-tight);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  & [part~="cl-recipe-card-summary"] {
+    margin: var(--space-1) 0 0;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  & [part~="cl-recipe-card-meta"] {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--target);
+    margin-top: var(--space-1);
+    padding-right: var(--target);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  & [part~="cl-recipe-card-made"] {
+    display: none;
+  }
+
+  & [part~="cl-recipe-card-favorite"] {
+    position: relative;
+    z-index: 2;
+    display: inline-grid;
+    place-items: center;
+    width: var(--target);
+    height: var(--target);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    --lc-icon-size: var(--icon);
+  }
+
+  & [part~="cl-recipe-card-favorite"][aria-pressed="true"] {
+    color: var(--glow);
+  }
+
+  & [part~="cl-recipe-card-favorite-meta"] {
+    position: absolute;
+    right: var(--space-1);
+    bottom: var(--space-1);
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  & [part~="cl-recipe-card-favorite-photo"] {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    display: none;
+    background: var(--on-photo-chip);
+    color: var(--on-photo);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  @media (min-width: 640px) {
+    & [part~="cl-recipe-card-made"] {
+      display: inline;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    & [part~="cl-recipe-card-pill"] {
+      top: var(--space-3);
+      left: var(--space-3);
+    }
+
+    & [part~="cl-recipe-card-name"] {
+      font-size: var(--text-2xl);
+    }
+
+    & [part~="cl-recipe-card-favorite-photo"] {
+      top: var(--space-3);
+      right: var(--space-3);
+      display: inline-grid;
+    }
+
+    & [part~="cl-recipe-card-favorite-meta"] {
+      display: none;
+    }
+  }
+}

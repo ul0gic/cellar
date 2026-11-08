@@ -1,0 +1,14 @@
+services:
+  cellar:
+    image: cellar:dev
+    container_name: cellar-rig
+    ports: !override
+      - "8081:8080"
+    volumes: !override
+      - ./.rig/data:/data
+    networks:
+      - rig
+
+networks:
+  rig:
+    name: cellar-rig

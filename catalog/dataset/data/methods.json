@@ -1,0 +1,32 @@
+[
+  {
+    "key": "blend",
+    "name": "Blend",
+    "dilutionPercent": 25
+  },
+  {
+    "key": "build",
+    "name": "Build",
+    "dilutionPercent": 10
+  },
+  {
+    "key": "layer",
+    "name": "Layer",
+    "dilutionPercent": 0
+  },
+  {
+    "key": "muddle",
+    "name": "Muddle",
+    "dilutionPercent": 10
+  },
+  {
+    "key": "shake",
+    "name": "Shake",
+    "dilutionPercent": 25
+  },
+  {
+    "key": "stir",
+    "name": "Stir",
+    "dilutionPercent": 20
+  }
+]

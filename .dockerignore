@@ -1,0 +1,14 @@
+node_modules
+dist
+.rig
+catalog/out
+catalog/source
+contract/dist
+backend/generated
+*.log
+.project
+.claude
+spike
+tests/*
+!tests/package.json
+docs

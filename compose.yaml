@@ -1,0 +1,18 @@
+services:
+  cellar:
+    image: ghcr.io/ul0gic/cellar:1
+    container_name: cellar
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # user: "1001:1001"
+    # environment:
+    #   CELLAR_BASE_PATH: /cellar
+    #   CELLAR_TRUSTED_PROXIES: private

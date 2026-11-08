@@ -1,0 +1,79 @@
+@layer theme, base, components, utilities;
+
+@import "@lightstart/light/theme/theme.css" layer(base);
+@import "./design-system/tokens.css";
+@import "./design-system/fonts.css";
+@import "./design-system/base.css";
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --*: initial;
+  --breakpoint-md: 640px;
+  --breakpoint-lg: 1024px;
+}
+
+@theme inline reference {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-text: var(--accent-text);
+  --color-accent-wash: var(--accent-wash);
+  --color-brass: var(--brass);
+  --color-brass-text: var(--brass-text);
+  --color-glow: var(--glow);
+  --color-danger: var(--danger);
+  --color-danger-wash: var(--danger-wash);
+  --color-notice-wash: var(--notice-wash);
+  --color-notice-line: var(--notice-line);
+  --color-on-photo: var(--on-photo);
+  --color-on-photo-chip: var(--on-photo-chip);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-7: var(--space-7);
+  --spacing-8: var(--space-8);
+  --spacing-gutter: var(--gutter);
+  --spacing-gutter-wide: var(--gutter-wide);
+  --spacing-target: var(--target);
+  --radius-xs: var(--radius-xs);
+  --radius-check: var(--radius-check);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-pill: var(--radius-pill);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-md: var(--text-md);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+  --text-3xl: var(--text-3xl);
+  --text-4xl: var(--text-4xl);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-weight-regular: var(--weight-regular);
+  --font-weight-medium: var(--weight-medium);
+  --font-weight-bold: var(--weight-bold);
+  --leading-tight: var(--leading-tight);
+  --leading-snug: var(--leading-snug);
+  --leading-body: var(--leading-body);
+  --shadow-card: var(--shadow-card);
+  --shadow-sheet: var(--shadow-sheet);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-accent: var(--shadow-accent);
+  --container-content: var(--content-max);
+  --container-reading: var(--reading-max);
+}

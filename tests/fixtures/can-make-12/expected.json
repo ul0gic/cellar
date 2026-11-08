@@ -1,0 +1,41 @@
+{
+  "note": "Hand-derived from AC-30, AC-31, AC-33 and D-2 section 5 as amended; not produced by running the product.",
+  "shelf": {
+    "bottles": ["CM Bourbon (sealed)", "CM Dry Curacao (open)"],
+    "marked": ["CM Gin", "CM Lemon", "CM Sugar", "CM Water", "CM Citrus"],
+    "householdSubstitution": "CM Dry Curacao treated as CM Triple Sec (same_drink)"
+  },
+  "recipes": {
+    "CM R01 Direct": { "missing": 0, "lines": ["on_hand", "on_hand", "on_hand"], "add": [] },
+    "CM R02 Via Substitute": { "missing": 0, "lines": ["via_substitute:CM Bourbon", "on_hand"], "add": [] },
+    "CM R03 Via Variant": { "missing": 0, "lines": ["via_variant:CM Bourbon", "on_hand"], "add": [] },
+    "CM R04 Specified Variant": { "missing": 1, "lines": ["missing", "on_hand"], "add": ["CM Whiskey"] },
+    "CM R05 Household Sub": {
+      "missing": 0,
+      "lines": ["via_household_substitution:CM Dry Curacao:same_drink", "on_hand"],
+      "add": []
+    },
+    "CM R06 House Made": { "missing": 0, "lines": ["via_house_made:CM Cordial", "on_hand"], "add": [] },
+    "CM R07 Optional Lines": { "missing": 0, "lines": ["on_hand", "missing", "missing"], "add": [] },
+    "CM R08 Parent Not Child": { "missing": 1, "lines": ["missing", "on_hand"], "add": ["CM Yuzu"] },
+    "CM R09 Two Missing": { "missing": 2, "lines": ["missing", "missing", "on_hand"], "add": ["CM Rum", "CM Lime"] },
+    "CM R10 Duplicate Lines": { "missing": 2, "lines": ["missing", "missing", "on_hand"], "add": ["CM Rum"] },
+    "CM R11 Optional Missing": { "missing": 1, "lines": ["missing", "missing", "on_hand"], "add": ["CM Rum"] },
+    "CM R12 Three Missing": {
+      "missing": 3,
+      "lines": ["missing", "missing", "missing", "on_hand"],
+      "add": ["CM Rum", "CM Lime", "CM Mint"]
+    }
+  },
+  "filters": {
+    "can_make": ["R01", "R02", "R03", "R05", "R06", "R07"],
+    "missing_1": ["R04", "R08", "R11"],
+    "missing_2": ["R09", "R10"]
+  },
+  "facets": { "all": 12, "canMake": 6, "missing1": 3, "missing2": 2 },
+  "buyNext": [
+    { "name": "CM Rum", "unlocks": ["CM R10 Duplicate Lines", "CM R11 Optional Missing"] },
+    { "name": "CM Whiskey", "unlocks": ["CM R04 Specified Variant"] },
+    { "name": "CM Yuzu", "unlocks": ["CM R08 Parent Not Child"] }
+  ]
+}

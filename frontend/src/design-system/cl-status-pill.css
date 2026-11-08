@@ -1,0 +1,36 @@
+:where(.cl-status-pill, cl-status-pill) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--on-photo-chip);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--on-photo);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-snug);
+
+  & [part~="cl-status-pill-bulbs"] {
+    display: inline-flex;
+    gap: var(--bulb-gap);
+    align-items: center;
+  }
+
+  & [part~="cl-status-pill-long"] {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    font-size: var(--text-sm);
+
+    & [part~="cl-status-pill-short"] {
+      display: none;
+    }
+
+    & [part~="cl-status-pill-long"] {
+      display: inline;
+    }
+  }
+}

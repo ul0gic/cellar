@@ -1,0 +1,1067 @@
+{
+  "ingredients": [
+    {
+      "id": 1,
+      "name": "Gin",
+      "foldedName": "gin",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 2,
+      "name": "London Dry Gin",
+      "foldedName": "london dry gin",
+      "parentId": 1,
+      "onHand": false
+    },
+    {
+      "id": 3,
+      "name": "Old Tom Gin",
+      "foldedName": "old tom gin",
+      "parentId": 1,
+      "onHand": false
+    },
+    {
+      "id": 4,
+      "name": "Sweet Vermouth",
+      "foldedName": "sweet vermouth",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 5,
+      "name": "Vermouth di Torino",
+      "foldedName": "vermouth di torino",
+      "parentId": 4,
+      "onHand": false
+    },
+    {
+      "id": 6,
+      "name": "Dry Vermouth",
+      "foldedName": "dry vermouth",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 7,
+      "name": "Campari",
+      "foldedName": "campari",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 8,
+      "name": "Lime Juice",
+      "foldedName": "lime juice",
+      "parentId": null,
+      "onHand": true
+    },
+    {
+      "id": 9,
+      "name": "Lemon Juice",
+      "foldedName": "lemon juice",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 10,
+      "name": "Sugar",
+      "foldedName": "sugar",
+      "parentId": null,
+      "onHand": true
+    },
+    {
+      "id": 11,
+      "name": "Water",
+      "foldedName": "water",
+      "parentId": null,
+      "onHand": true
+    },
+    {
+      "id": 12,
+      "name": "Simple Syrup",
+      "foldedName": "simple syrup",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 13,
+      "name": "Rich Simple Syrup",
+      "foldedName": "rich simple syrup",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 14,
+      "name": "Honey",
+      "foldedName": "honey",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 15,
+      "name": "Honey Syrup",
+      "foldedName": "honey syrup",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 16,
+      "name": "Pomegranate Juice",
+      "foldedName": "pomegranate juice",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 17,
+      "name": "Grenadine",
+      "foldedName": "grenadine",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 18,
+      "name": "Almond",
+      "foldedName": "almond",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 19,
+      "name": "Orgeat",
+      "foldedName": "orgeat",
+      "parentId": null,
+      "onHand": true
+    },
+    {
+      "id": 20,
+      "name": "Rum",
+      "foldedName": "rum",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 21,
+      "name": "White Rum",
+      "foldedName": "white rum",
+      "parentId": 20,
+      "onHand": false
+    },
+    {
+      "id": 22,
+      "name": "Aged Rum",
+      "foldedName": "aged rum",
+      "parentId": 20,
+      "onHand": false
+    },
+    {
+      "id": 23,
+      "name": "Jamaican Aged Rum",
+      "foldedName": "jamaican aged rum",
+      "parentId": 22,
+      "onHand": false
+    },
+    {
+      "id": 24,
+      "name": "Whiskey",
+      "foldedName": "whiskey",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 25,
+      "name": "Bourbon",
+      "foldedName": "bourbon",
+      "parentId": 24,
+      "onHand": false
+    },
+    {
+      "id": 26,
+      "name": "Rye Whiskey",
+      "foldedName": "rye whiskey",
+      "parentId": 24,
+      "onHand": false
+    },
+    {
+      "id": 27,
+      "name": "Bottled-in-Bond Bourbon",
+      "foldedName": "bottled-in-bond bourbon",
+      "parentId": 25,
+      "onHand": false
+    },
+    {
+      "id": 28,
+      "name": "Triple Sec",
+      "foldedName": "triple sec",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 29,
+      "name": "Cointreau",
+      "foldedName": "cointreau",
+      "parentId": 28,
+      "onHand": false
+    },
+    {
+      "id": 30,
+      "name": "Clément Créole Shrubb",
+      "foldedName": "clement creole shrubb",
+      "parentId": 28,
+      "onHand": true
+    },
+    {
+      "id": 31,
+      "name": "Angostura Bitters",
+      "foldedName": "angostura bitters",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 32,
+      "name": "Orange Bitters",
+      "foldedName": "orange bitters",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 33,
+      "name": "Maraschino Liqueur",
+      "foldedName": "maraschino liqueur",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 34,
+      "name": "Egg White",
+      "foldedName": "egg white",
+      "parentId": null,
+      "onHand": false
+    },
+    {
+      "id": 35,
+      "name": "Soda Water",
+      "foldedName": "soda water",
+      "parentId": null,
+      "onHand": true
+    }
+  ],
+  "parts": [
+    {
+      "ingredientId": 12,
+      "position": 0,
+      "partIngredientId": 10
+    },
+    {
+      "ingredientId": 12,
+      "position": 1,
+      "partIngredientId": 11
+    },
+    {
+      "ingredientId": 13,
+      "position": 0,
+      "partIngredientId": 12
+    },
+    {
+      "ingredientId": 13,
+      "position": 1,
+      "partIngredientId": 10
+    },
+    {
+      "ingredientId": 15,
+      "position": 0,
+      "partIngredientId": 14
+    },
+    {
+      "ingredientId": 15,
+      "position": 1,
+      "partIngredientId": 11
+    },
+    {
+      "ingredientId": 17,
+      "position": 0,
+      "partIngredientId": 16
+    },
+    {
+      "ingredientId": 17,
+      "position": 1,
+      "partIngredientId": 10
+    },
+    {
+      "ingredientId": 19,
+      "position": 0,
+      "partIngredientId": 18
+    },
+    {
+      "ingredientId": 19,
+      "position": 1,
+      "partIngredientId": 10
+    }
+  ],
+  "bottles": [
+    {
+      "id": 1,
+      "ingredientId": 2,
+      "status": "sealed"
+    },
+    {
+      "id": 2,
+      "ingredientId": 4,
+      "status": "open"
+    },
+    {
+      "id": 3,
+      "ingredientId": 6,
+      "status": "finished"
+    },
+    {
+      "id": 4,
+      "ingredientId": 7,
+      "status": "finished"
+    },
+    {
+      "id": 5,
+      "ingredientId": 23,
+      "status": "sealed"
+    },
+    {
+      "id": 6,
+      "ingredientId": 25,
+      "status": "open"
+    },
+    {
+      "id": 7,
+      "ingredientId": 27,
+      "status": "sealed"
+    },
+    {
+      "id": 8,
+      "ingredientId": 29,
+      "status": "finished"
+    },
+    {
+      "id": 9,
+      "ingredientId": 29,
+      "status": "sealed"
+    },
+    {
+      "id": 10,
+      "ingredientId": 31,
+      "status": "open"
+    }
+  ],
+  "householdSubstitutions": [
+    {
+      "id": 1,
+      "onHandIngredientId": 8,
+      "forIngredientId": 9,
+      "effect": "changes_drink"
+    },
+    {
+      "id": 2,
+      "onHandIngredientId": 25,
+      "forIngredientId": 26,
+      "effect": "same_drink"
+    },
+    {
+      "id": 3,
+      "onHandIngredientId": 14,
+      "forIngredientId": 32,
+      "effect": "changes_drink"
+    },
+    {
+      "id": 4,
+      "onHandIngredientId": 2,
+      "forIngredientId": 9,
+      "effect": "same_drink"
+    }
+  ],
+  "recipes": [
+    {
+      "id": 1,
+      "name": "Clause One Sour",
+      "expected": {
+        "canMake": true,
+        "missingCount": 0
+      },
+      "lines": [
+        {
+          "id": 1,
+          "position": 0,
+          "ingredientId": 2,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 2,
+          "position": 1,
+          "ingredientId": 9,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_household_substitution",
+            "satisfiedBy": 8,
+            "substitutionEffect": "changes_drink"
+          }
+        },
+        {
+          "id": 3,
+          "position": 2,
+          "ingredientId": 12,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_house_made",
+            "satisfiedBy": 12,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Variant Martinez",
+      "expected": {
+        "canMake": true,
+        "missingCount": 0
+      },
+      "lines": [
+        {
+          "id": 4,
+          "position": 0,
+          "ingredientId": 1,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_variant",
+            "satisfiedBy": 2,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 5,
+          "position": 1,
+          "ingredientId": 4,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 6,
+          "position": 2,
+          "ingredientId": 33,
+          "optional": true,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 7,
+          "position": 3,
+          "ingredientId": 31,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Specified Old Tom",
+      "expected": {
+        "canMake": false,
+        "missingCount": 1
+      },
+      "lines": [
+        {
+          "id": 8,
+          "position": 0,
+          "ingredientId": 1,
+          "optional": false,
+          "specified": true,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 9,
+          "position": 1,
+          "ingredientId": 4,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Deep Variant Daiquiri",
+      "expected": {
+        "canMake": true,
+        "missingCount": 0
+      },
+      "lines": [
+        {
+          "id": 10,
+          "position": 0,
+          "ingredientId": 20,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_variant",
+            "satisfiedBy": 23,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 11,
+          "position": 1,
+          "ingredientId": 8,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 12,
+          "position": 2,
+          "ingredientId": 12,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_house_made",
+            "satisfiedBy": 12,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Substitute Order",
+      "expected": {
+        "canMake": false,
+        "missingCount": 1
+      },
+      "lines": [
+        {
+          "id": 13,
+          "position": 0,
+          "ingredientId": 6,
+          "optional": false,
+          "specified": false,
+          "substitutes": [3, 4, 2],
+          "expected": {
+            "status": "via_substitute",
+            "satisfiedBy": 4,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 14,
+          "position": 1,
+          "ingredientId": 7,
+          "optional": false,
+          "specified": false,
+          "substitutes": [32],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 15,
+          "position": 2,
+          "ingredientId": 34,
+          "optional": true,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Clause Precedence",
+      "expected": {
+        "canMake": true,
+        "missingCount": 0
+      },
+      "lines": [
+        {
+          "id": 16,
+          "position": 0,
+          "ingredientId": 1,
+          "optional": false,
+          "specified": false,
+          "substitutes": [25],
+          "expected": {
+            "status": "via_substitute",
+            "satisfiedBy": 25,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 17,
+          "position": 1,
+          "ingredientId": 26,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_household_substitution",
+            "satisfiedBy": 25,
+            "substitutionEffect": "same_drink"
+          }
+        },
+        {
+          "id": 18,
+          "position": 2,
+          "ingredientId": 24,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_variant",
+            "satisfiedBy": 25,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 19,
+          "position": 3,
+          "ingredientId": 28,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_variant",
+            "satisfiedBy": 30,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Parent Does Not Satisfy Child",
+      "expected": {
+        "canMake": false,
+        "missingCount": 1
+      },
+      "lines": [
+        {
+          "id": 20,
+          "position": 0,
+          "ingredientId": 5,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 21,
+          "position": 1,
+          "ingredientId": 25,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 22,
+          "position": 2,
+          "ingredientId": 22,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_variant",
+            "satisfiedBy": 23,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Duplicate Lines",
+      "expected": {
+        "canMake": false,
+        "missingCount": 2
+      },
+      "lines": [
+        {
+          "id": 23,
+          "position": 0,
+          "ingredientId": 4,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 24,
+          "position": 1,
+          "ingredientId": 4,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 25,
+          "position": 2,
+          "ingredientId": 7,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 26,
+          "position": 3,
+          "ingredientId": 7,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Counted Once",
+      "expected": {
+        "canMake": false,
+        "missingCount": 2
+      },
+      "lines": [
+        {
+          "id": 27,
+          "position": 0,
+          "ingredientId": 15,
+          "optional": false,
+          "specified": false,
+          "substitutes": [12, 13],
+          "expected": {
+            "status": "via_substitute",
+            "satisfiedBy": 12,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 28,
+          "position": 1,
+          "ingredientId": 9,
+          "optional": true,
+          "specified": false,
+          "substitutes": [32],
+          "expected": {
+            "status": "via_household_substitution",
+            "satisfiedBy": 8,
+            "substitutionEffect": "changes_drink"
+          }
+        },
+        {
+          "id": 29,
+          "position": 2,
+          "ingredientId": 17,
+          "optional": false,
+          "specified": false,
+          "substitutes": [14, 16],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 30,
+          "position": 3,
+          "ingredientId": 34,
+          "optional": false,
+          "specified": false,
+          "substitutes": [14, 33],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Nested House Made",
+      "expected": {
+        "canMake": false,
+        "missingCount": 1
+      },
+      "lines": [
+        {
+          "id": 31,
+          "position": 0,
+          "ingredientId": 13,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "via_house_made",
+            "satisfiedBy": 13,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 32,
+          "position": 1,
+          "ingredientId": 32,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 33,
+          "position": 2,
+          "ingredientId": 31,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Optional Only Missing",
+      "expected": {
+        "canMake": true,
+        "missingCount": 0
+      },
+      "lines": [
+        {
+          "id": 34,
+          "position": 0,
+          "ingredientId": 29,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 35,
+          "position": 1,
+          "ingredientId": 8,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 36,
+          "position": 2,
+          "ingredientId": 33,
+          "optional": true,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 37,
+          "position": 3,
+          "ingredientId": 34,
+          "optional": true,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Marked Composite",
+      "expected": {
+        "canMake": false,
+        "missingCount": 1
+      },
+      "lines": [
+        {
+          "id": 38,
+          "position": 0,
+          "ingredientId": 17,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "missing",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 39,
+          "position": 1,
+          "ingredientId": 35,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 40,
+          "position": 2,
+          "ingredientId": 10,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        },
+        {
+          "id": 41,
+          "position": 3,
+          "ingredientId": 19,
+          "optional": false,
+          "specified": false,
+          "substitutes": [],
+          "expected": {
+            "status": "on_hand",
+            "satisfiedBy": null,
+            "substitutionEffect": null
+          }
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "onHand": [2, 4, 8, 10, 11, 12, 13, 19, 23, 25, 27, 29, 30, 31, 35],
+    "buyNext": [
+      {
+        "ingredientId": 7,
+        "unlocks": [8, 5]
+      },
+      {
+        "ingredientId": 14,
+        "unlocks": [9, 10]
+      },
+      {
+        "ingredientId": 32,
+        "unlocks": [10, 5]
+      },
+      {
+        "ingredientId": 1,
+        "unlocks": [3]
+      },
+      {
+        "ingredientId": 17,
+        "unlocks": [12]
+      },
+      {
+        "ingredientId": 16,
+        "unlocks": [12]
+      },
+      {
+        "ingredientId": 5,
+        "unlocks": [7]
+      }
+    ]
+  }
+}

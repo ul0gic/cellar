@@ -1,0 +1,261 @@
+[
+  {
+    "key": "grapefruit-super-juice-kevin-koss-6",
+    "name": "Grapefruit Super Juice (Kevin Koss)",
+    "description": "A zesty, acid-adjusted substitute for creating bold Palomas and Hemingway Daiquiris. Peel one grapefruit (zest only, little white pith as possible). Weight the peels to calculate required acids, MSG and water needed. Let acids work on the peels for 2 hours to extract oils then blends peels, acids, water and juice of the lime.  Blend well until smooth. Strain out solids with cheesecloth and squeeze remaining solids to extract as much liquid as possible.  Bottle, store refrigerated, consume within 2 weeks.",
+    "inputs": [
+      {
+        "key": "peels",
+        "label": "Grapefruit Peel",
+        "defaultValue": 30,
+        "suffix": "grams"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "citric_acid",
+        "label": "Citric Acid",
+        "expression": "peels * 0.8",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "malic_acid",
+        "label": "Malic Acid",
+        "expression": "peels * 0.2",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "msg",
+        "label": "MSG (monosodium glutamate)",
+        "expression": "peels * 0.033",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "water",
+        "label": "Water",
+        "expression": "peels * 16.66",
+        "decimals": 2,
+        "suffix": "g"
+      }
+    ]
+  },
+  {
+    "key": "kumquat-super-juice-7",
+    "name": "Kumquat Super Juice",
+    "description": "Acid-adjusted kumquat juice for a tangy twist in exotic and tropical cocktails.",
+    "inputs": [
+      {
+        "key": "fruit",
+        "label": "Enter weight of Kumquat fruit",
+        "defaultValue": 100,
+        "suffix": "g"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "eval1",
+        "label": "Citric acid",
+        "expression": "fruit * 0.25",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "eval2",
+        "label": "Ascorbic Acid",
+        "expression": "fruit * 0.002",
+        "decimals": 2,
+        "suffix": ""
+      },
+      {
+        "key": "eval3",
+        "label": "Water",
+        "expression": "fruit * 4.165",
+        "decimals": 0,
+        "suffix": "g"
+      }
+    ]
+  },
+  {
+    "key": "lemon-aid-brian-tasch-2",
+    "name": "Lemon Aid (Brian Tasch)",
+    "description": "Clean lemons to remove wax. Peel lemons. Combine all ingredients and blend. Do NOT add the actual lemon juice of the lemon. Strain result. Store in fridge. Nearly Shelf-Stable in fridge.",
+    "inputs": [
+      {
+        "key": "peels",
+        "label": "Lemon Peels",
+        "defaultValue": 30,
+        "suffix": "grams"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "eval1",
+        "label": "Lemon Peels",
+        "expression": "peels",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "eval2",
+        "label": "Sugar",
+        "expression": "peels",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "eval3",
+        "label": "Citric Acid",
+        "expression": "peels / 30 * 27",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "eval4",
+        "label": "Malic Acid",
+        "expression": "peels / 30 * 3",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "eval5",
+        "label": "Water",
+        "expression": "peels / 30 * 500",
+        "decimals": 2,
+        "suffix": "ml"
+      },
+      {
+        "key": "eval6",
+        "label": "Salt",
+        "expression": "peels / 30 * 1",
+        "decimals": 2,
+        "suffix": "g"
+      }
+    ]
+  },
+  {
+    "key": "lemon-super-juice-kevin-koss-4",
+    "name": "Lemon Super Juice (Kevin Koss)",
+    "description": "Peel one lemon (zest only, little white pith as possible). Use an equal weight the peels in acid and calculated water needed. Let acid work on the peels for 2 hours to extract oils then blends peels, acid, water and juice of the lemon.  Blend well until smooth. Strain out solids with cheesecloth. Squeeze remaining solids to extract as much liquid as possible.  Bottle, store refrigerated, consume within 2 weeks.",
+    "inputs": [
+      {
+        "key": "peels",
+        "label": "Lemon Peel",
+        "defaultValue": 15,
+        "suffix": "grams"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "citric_acid",
+        "label": "Citric Acid",
+        "expression": "peels",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "water",
+        "label": "Water",
+        "expression": "peels * 16.66",
+        "decimals": 2,
+        "suffix": "g"
+      }
+    ]
+  },
+  {
+    "key": "lime-super-juice-kevin-koss-3",
+    "name": "Lime Super Juice (Kevin Koss)",
+    "description": "Peel one large lime (zest only, little white pith as possible). Weight the peels to calculate required acids and water needed. Let acids work on the peels for 2 hours to extract oils then blends peels, acids, water and juice of the lime.  Blend well until smooth. Strain out solids with cheesecloth and squeeze remaining solids to extract as much liquid as possible.  Bottle, store refrigerated, consume within 2 weeks.",
+    "inputs": [
+      {
+        "key": "peels",
+        "label": "Lime Peel",
+        "defaultValue": 12,
+        "suffix": "grams"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "citric_acid",
+        "label": "Citric Acid",
+        "expression": "peels * 0.66",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "malic_acid",
+        "label": "Malic Acid",
+        "expression": "peels * 0.33",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "water",
+        "label": "Water",
+        "expression": "peels * 16.66",
+        "decimals": 2,
+        "suffix": "g"
+      }
+    ]
+  },
+  {
+    "key": "orange-super-juice-kevin-koss-5",
+    "name": "Orange Super Juice (Kevin Koss)",
+    "description": "Acid-adjusted orange juice to replace lemon or lime; perfect for cognac or tequila sours. Peel one orange (zest only, little white pith as possible). Weight the peels to calculate required acids and water needed. Let acids work on the peels for 2 hours to extract oils then blends peels, acids, water and juice of the lime.  Blend well until smooth. Strain out solids with cheesecloth and squeeze remaining solids to extract as much liquid as possible.  Bottle, store refrigerated, consume within 2 weeks.",
+    "inputs": [
+      {
+        "key": "peels",
+        "label": "Orange Peel",
+        "defaultValue": 20,
+        "suffix": "grams"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "citric_acid",
+        "label": "Citric Acid",
+        "expression": "peels * 0.9",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "malic_acid",
+        "label": "Malic Acid",
+        "expression": "peels * 0.11",
+        "decimals": 2,
+        "suffix": "g"
+      },
+      {
+        "key": "water",
+        "label": "Water",
+        "expression": "peels * 16.66",
+        "decimals": 2,
+        "suffix": "g"
+      }
+    ]
+  },
+  {
+    "key": "simple-syrup-1",
+    "name": "Simple syrup",
+    "description": "Add water and put to light simmer until it combines",
+    "inputs": [
+      {
+        "key": "sugar",
+        "label": "Sugar",
+        "defaultValue": 150,
+        "suffix": "g"
+      }
+    ],
+    "outputs": [
+      {
+        "key": "water",
+        "label": "Water",
+        "expression": "sugar * 1.5",
+        "decimals": 2,
+        "suffix": "g"
+      }
+    ]
+  }
+]

@@ -1,0 +1,206 @@
+[
+  {
+    "key": "astringent",
+    "name": "Astringent"
+  },
+  {
+    "key": "balanced",
+    "name": "Balanced"
+  },
+  {
+    "key": "bitter",
+    "name": "Bitter"
+  },
+  {
+    "key": "bubblegum",
+    "name": "Bubblegum"
+  },
+  {
+    "key": "buttery",
+    "name": "Buttery"
+  },
+  {
+    "key": "caramel",
+    "name": "Caramel"
+  },
+  {
+    "key": "cereal",
+    "name": "Cereal"
+  },
+  {
+    "key": "chewy",
+    "name": "Chewy"
+  },
+  {
+    "key": "chocolatey",
+    "name": "Chocolatey"
+  },
+  {
+    "key": "citrusy",
+    "name": "Citrusy"
+  },
+  {
+    "key": "clean-finish",
+    "name": "Clean finish"
+  },
+  {
+    "key": "clove",
+    "name": "Clove"
+  },
+  {
+    "key": "coffee",
+    "name": "Coffee"
+  },
+  {
+    "key": "complex",
+    "name": "Complex"
+  },
+  {
+    "key": "creamy",
+    "name": "Creamy"
+  },
+  {
+    "key": "crisp",
+    "name": "Crisp"
+  },
+  {
+    "key": "dry",
+    "name": "Dry"
+  },
+  {
+    "key": "earthy",
+    "name": "Earthy"
+  },
+  {
+    "key": "fizzy",
+    "name": "Fizzy"
+  },
+  {
+    "key": "floral",
+    "name": "Floral"
+  },
+  {
+    "key": "fruity",
+    "name": "Fruity"
+  },
+  {
+    "key": "full-body",
+    "name": "Full body"
+  },
+  {
+    "key": "funky",
+    "name": "Funky"
+  },
+  {
+    "key": "grainy",
+    "name": "Grainy"
+  },
+  {
+    "key": "herbacious",
+    "name": "Herbacious"
+  },
+  {
+    "key": "herbal",
+    "name": "Herbal"
+  },
+  {
+    "key": "hoppy",
+    "name": "Hoppy"
+  },
+  {
+    "key": "light-body",
+    "name": "Light body"
+  },
+  {
+    "key": "lingering-finish",
+    "name": "Lingering finish"
+  },
+  {
+    "key": "malty",
+    "name": "Malty"
+  },
+  {
+    "key": "medicinal",
+    "name": "Medicinal"
+  },
+  {
+    "key": "medium-body",
+    "name": "Medium body"
+  },
+  {
+    "key": "metallic",
+    "name": "Metallic"
+  },
+  {
+    "key": "nutty",
+    "name": "Nutty"
+  },
+  {
+    "key": "peppery",
+    "name": "Peppery"
+  },
+  {
+    "key": "piney",
+    "name": "Piney"
+  },
+  {
+    "key": "refreshing",
+    "name": "Refreshing"
+  },
+  {
+    "key": "roasty",
+    "name": "Roasty"
+  },
+  {
+    "key": "simple",
+    "name": "Simple"
+  },
+  {
+    "key": "smoky",
+    "name": "Smoky"
+  },
+  {
+    "key": "smooth",
+    "name": "Smooth"
+  },
+  {
+    "key": "sour",
+    "name": "Sour"
+  },
+  {
+    "key": "spicy",
+    "name": "Spicy"
+  },
+  {
+    "key": "sweet",
+    "name": "Sweet"
+  },
+  {
+    "key": "toasty",
+    "name": "Toasty"
+  },
+  {
+    "key": "tropical",
+    "name": "Tropical"
+  },
+  {
+    "key": "vanilla",
+    "name": "Vanilla"
+  },
+  {
+    "key": "vegetal",
+    "name": "Vegetal"
+  },
+  {
+    "key": "warming",
+    "name": "Warming"
+  },
+  {
+    "key": "woody",
+    "name": "Woody"
+  },
+  {
+    "key": "yeasty",
+    "name": "Yeasty"
+  }
+]

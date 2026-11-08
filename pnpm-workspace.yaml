@@ -1,0 +1,6 @@
+packages:
+  - frontend
+  - backend
+  - contract
+  - catalog
+  - tests

@@ -1,0 +1,35 @@
+{
+  "name": "cellar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -p contract && tsc -p backend && tsc -p catalog && tsc -p frontend && tsc -p tests",
+    "lint": "biome check --error-on-warnings . && pnpm light-check",
+    "format": "biome format --write .",
+    "light-check": "pnpm --filter @cellar/frontend exec light check src",
+    "openapi": "node contract/scripts/openapi.ts",
+    "build:frontend": "pnpm --filter @cellar/frontend exec vite build",
+    "catalog:build": "node catalog/bin/cellar-catalog.ts build --out catalog/out",
+    "dev": "CELLAR_DATA_DIR=.rig/dev-data node backend/bin/cellar.ts serve",
+    "docker:build": "docker build -t cellar:dev ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@seriousme/openapi-schema-validator": "2.11.0",
+    "@types/node": "26.6.6",
+    "@typescript/typescript6": "6.0.2",
+    "typescript": "7.0.2"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "@fastify/swagger",
+        "openapi-types"
+      ]
+    }
+  }
+}

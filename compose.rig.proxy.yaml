@@ -1,0 +1,94 @@
+services:
+  cellar:
+    ports: !reset []
+    volumes:
+      - ./.rig/ca:/ca:ro
+    environment:
+      CELLAR_BASE_PATH: /cellar
+      CELLAR_TRUSTED_PROXIES: private
+      CELLAR_OUTBOUND_ALLOW: recipes.rig.test,catalog.rig.test,ai.rig.test
+      CELLAR_CATALOG_URL: https://catalog.rig.test/catalog-index.json
+      CELLAR_AI_BASE_URL: https://ai.rig.test/v1
+      NODE_EXTRA_CA_CERTS: /ca/root.crt
+    depends_on:
+      caddy-ca:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: cellar-rig-caddy
+    ports:
+      - "8443:8443"
+    networks:
+      default: {}
+      rig:
+        aliases:
+          - recipes.rig.test
+          - catalog.rig.test
+          - ai.rig.test
+    volumes:
+      - ./.rig/caddy:/data/caddy
+      - ./tests/fixtures/catalog-next:/srv/catalog-next:ro
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O /dev/null http://127.0.0.1:2019/config/ && test -f /data/caddy/pki/authorities/local/root.crt
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # Caddy keeps its pki 0700/0600 as root; Cellar (uid 1000) and the host read this public copy of root.crt only.
+  caddy-ca:
+    image: caddy:2.11.4-alpine
+    container_name: cellar-rig-caddy-ca
+    command: [ "install", "-m", "0644", "/data/caddy/pki/authorities/local/root.crt", "/ca/root.crt" ]
+    network_mode: none
+    volumes:
+      - ./.rig/caddy:/data/caddy:ro
+      - ./.rig/ca:/ca
+    depends_on:
+      caddy:
+        condition: service_healthy
+
+  fixtures:
+    image: node:26.13.0-trixie-slim
+    container_name: cellar-rig-fixtures
+    user: node
+    command: [ "node", "/fixtures/outbound/server.ts" ]
+    environment:
+      PORT: "8090"
+    volumes:
+      - ./tests/fixtures:/fixtures:ro
+    networks:
+      - rig
+
+networks:
+  rig:
+    internal: true
+
+configs:
+  caddyfile:
+    content: |
+      {
+        local_certs
+        skip_install_trust
+      }
+
+      localhost:8443 {
+        log
+        reverse_proxy /cellar* cellar:8080
+      }
+
+      recipes.rig.test:443, ai.rig.test:443 {
+        log
+        reverse_proxy fixtures:8090
+      }
+
+      catalog.rig.test:443 {
+        log
+        root * /srv/catalog-next
+        file_server
+      }

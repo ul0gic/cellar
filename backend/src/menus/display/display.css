@@ -1,0 +1,97 @@
+/* Menu display: server-rendered, no light, no JavaScript needed. Flat CSS only: no nesting, :has, container queries, gap on flex, aspect-ratio, inset, clamp or color-mix (2020 TV browsers). Sizes in vw are px at 1920 wide divided by 19.2. */
+:root {
+  --tv-bg: #1D0D16;
+  --tv-glow-low: #5C2B1C;
+  --tv-glow-low-clear: rgba(92, 43, 28, 0);
+  --tv-glow-high: #3F1630;
+  --tv-glow-high-clear: rgba(63, 22, 48, 0);
+  --tv-text: #F6E9DA;
+  --tv-muted: #D2B8AA;
+  --tv-brass: #DDB062;
+  --tv-brass-soft: rgba(221, 176, 98, 0.55);
+  --tv-brass-rule: rgba(221, 176, 98, 0.35);
+  --tv-bulb: #FFC46B;
+  --tv-bulb-halo: rgba(255, 196, 107, 0.5);
+  --tv-plate-halo: rgba(255, 196, 107, 0.28);
+  --tv-plate-bg: #2A1420;
+  --tv-plate-field: #3A1A2A;
+  --tv-plate-field-edge: #24101B;
+  --tv-display: "Gloock", Georgia, serif;
+  --tv-body: "Hanken Grotesk", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --tv-inset: 2.0833vw;
+  --tv-frame: 0.1042vw;
+  --tv-rule-inset: 0.5208vw;
+  --tv-pad-top: 2.2917vw;
+  --tv-pad-x: 4.1667vw;
+  --tv-title: 4.5833vw;
+  --tv-date: 1.5625vw;
+  --tv-section: 2.0833vw;
+  --tv-col-pad: 1.875vw;
+  --tv-item-gap: 1.4583vw;
+  --tv-plate-gap: 1.4583vw;
+  --tv-ring: 0.1563vw;
+  --tv-foot: 1.25vw;
+  --tv-plate-grand: 9.375vw; --tv-name-grand: 3.3333vw; --tv-note-grand: 1.7708vw; --tv-item-gap-grand: 2.0833vw;
+  --tv-plate-standard: 7.8125vw; --tv-name-standard: 2.6042vw; --tv-note-standard: 1.5625vw;
+  --tv-plate-compact: 5.8333vw; --tv-name-compact: 2.0833vw; --tv-note-compact: 1.3542vw; --tv-gap-compact: 1.0417vw; --tv-section-compact: 1.6667vw; --tv-col-pad-compact: 1.25vw;
+  --tv-gone-title: 4.1667vw; --tv-gone-text: 1.6667vw;
+}
+@font-face { font-family: "Gloock"; src: url("fonts/Gloock-Regular-tv.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "Hanken Grotesk"; src: url("fonts/HankenGrotesk-tv.woff2") format("woff2"); font-weight: 400 700; }
+html, body { margin: 0; height: 100%; }
+body {
+  background-color: var(--tv-bg);
+  background-image: radial-gradient(ellipse 46.875vw 31.25vw at 12% 108%, var(--tv-glow-low), var(--tv-glow-low-clear)), radial-gradient(ellipse 46.875vw 31.25vw at 92% -8%, var(--tv-glow-high), var(--tv-glow-high-clear));
+  color: var(--tv-text); font-family: var(--tv-body); overflow: hidden;
+}
+.card { position: absolute; top: var(--tv-inset); left: var(--tv-inset); right: var(--tv-inset); bottom: var(--tv-inset); border: var(--tv-frame) solid var(--tv-brass); padding: var(--tv-pad-top) var(--tv-pad-x) var(--tv-inset); box-sizing: border-box; }
+.card:before { content: ""; position: absolute; top: var(--tv-rule-inset); left: var(--tv-rule-inset); right: var(--tv-rule-inset); bottom: var(--tv-rule-inset); border: 1px solid var(--tv-brass-soft); pointer-events: none; }
+.head { text-align: center; }
+h1 { font-family: var(--tv-display); font-weight: 400; font-size: var(--tv-title); line-height: 1; margin: 0; }
+.date { font-size: var(--tv-date); color: var(--tv-muted); margin-top: 0.5208vw; }
+.orn { width: 27.0833vw; height: 0.7292vw; margin: 0.8333vw auto 1.25vw; position: relative; }
+.orn:before, .orn:after { content: ""; position: absolute; top: 0.3646vw; width: 12.0833vw; height: 1px; background: var(--tv-brass); }
+.orn:before { left: 0; } .orn:after { right: 0; }
+.orn i { position: absolute; left: 50%; top: 0; width: 0.7292vw; height: 0.7292vw; margin-left: -0.3646vw; border-radius: 50%; background: var(--tv-bulb); box-shadow: 0 0 0.9375vw 0.3125vw var(--tv-bulb-halo); }
+.cols { display: -webkit-box; display: flex; }
+.col { -webkit-box-flex: 1; flex: 1 1 0; min-width: 0; padding: 0 var(--tv-col-pad); border-left: 1px solid var(--tv-brass-rule); }
+.col:first-child { border-left: 0; padding-left: 0; }
+.col:last-child { padding-right: 0; }
+h2 { font-family: var(--tv-display); font-weight: 400; color: var(--tv-brass); margin: 0 0 1.0417vw; font-size: var(--tv-section); line-height: 1.1; }
+.item { display: -webkit-box; display: flex; -webkit-box-align: center; align-items: center; margin-bottom: var(--tv-item-gap); }
+.plate { -webkit-box-flex: 0; flex: none; border-radius: 50%; overflow: hidden; margin-right: var(--tv-plate-gap); box-shadow: 0 0 0 var(--tv-ring) var(--tv-brass), 0 0 1.5625vw 0.1042vw var(--tv-plate-halo); background: var(--tv-plate-bg); }
+.plate img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.plate.none { background: radial-gradient(ellipse at 50% 35%, var(--tv-plate-field), var(--tv-plate-field-edge)); }
+.plate.none svg { display: block; width: 56%; height: 56%; margin: 22%; fill: none; stroke: var(--tv-brass); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.name { font-family: var(--tv-display); line-height: 1.04; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.note { color: var(--tv-muted); line-height: 1.3; margin-top: 0.3125vw; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.foot { position: absolute; left: 0; right: 0; bottom: 1.25vw; text-align: center; font-size: var(--tv-foot); color: var(--tv-muted); }
+.dots i { display: inline-block; width: 0.625vw; height: 0.625vw; border-radius: 50%; margin: 0 0.3125vw; border: var(--tv-frame) solid var(--tv-brass); vertical-align: middle; }
+.dots i.on { background: var(--tv-bulb); border-color: var(--tv-bulb); }
+
+/* density tiers: the server sets one class on body from the visible item count */
+.grand .plate { width: var(--tv-plate-grand); height: var(--tv-plate-grand); } .grand .name { font-size: var(--tv-name-grand); } .grand .note { font-size: var(--tv-note-grand); } .grand .item { margin-bottom: var(--tv-item-gap-grand); }
+.standard .plate { width: var(--tv-plate-standard); height: var(--tv-plate-standard); } .standard .name { font-size: var(--tv-name-standard); } .standard .note { font-size: var(--tv-note-standard); }
+.compact .plate { width: var(--tv-plate-compact); height: var(--tv-plate-compact); margin-right: var(--tv-gap-compact); } .compact .name { font-size: var(--tv-name-compact); } .compact .note { font-size: var(--tv-note-compact); } .compact .item { margin-bottom: var(--tv-gap-compact); } .compact h2 { font-size: var(--tv-section-compact); } .compact .col { padding: 0 var(--tv-col-pad-compact); }
+
+/* not live */
+.gone { position: absolute; top: 50%; left: 0; right: 0; margin-top: -6vw; text-align: center; }
+.gone h1 { font-size: var(--tv-gone-title); }
+.gone p { font-size: var(--tv-gone-text); color: var(--tv-muted); margin: 1.25vw 0 0; }
+
+/* a phone or a narrow window: one column, fixed sizes, page scrolls */
+@media (max-width: 700px) {
+  body { overflow: auto; background-image: none; }
+  .card { position: static; margin: 12px; padding: 28px 20px; border-width: 2px; }
+  .card:before { top: 6px; left: 6px; right: 6px; bottom: 6px; }
+  h1 { font-size: 44px; } .date { font-size: 17px; margin-top: 6px; }
+  .orn { width: 200px; height: 10px; margin: 16px auto 24px; } .orn:before, .orn:after { width: 84px; top: 5px; } .orn i { width: 10px; height: 10px; margin-left: -5px; box-shadow: 0 0 12px 4px var(--tv-bulb-halo); }
+  .cols { display: block; } .col { padding: 0; border: 0; margin-bottom: 20px; }
+  h2 { font-size: 26px; margin-bottom: 14px; }
+  .item, .grand .item, .compact .item { margin-bottom: 18px; }
+  .plate, .grand .plate, .standard .plate, .compact .plate { width: 72px; height: 72px; margin-right: 16px; box-shadow: 0 0 0 2px var(--tv-brass), 0 0 16px 1px var(--tv-plate-halo); }
+  .name, .grand .name, .standard .name, .compact .name { font-size: 26px; }
+  .note, .grand .note, .standard .note, .compact .note { font-size: 16px; margin-top: 4px; }
+  .foot { position: static; font-size: 15px; margin-top: 8px; }
+  .gone { position: static; margin: 30vh 24px 0; } .gone h1 { font-size: 36px; } .gone p { font-size: 18px; }
+}

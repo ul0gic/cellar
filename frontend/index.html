@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en-US" data-color-scheme="">
+  <head>
+    <meta charset="utf-8" />
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F4EFEE" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1E0E17" media="(prefers-color-scheme: dark)" />
+    <title>Cellar</title>
+    <script src="/prepaint.js"></script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" sizes="32x32" type="image/png" href="/favicon-32.png" />
+    <link rel="icon" sizes="192x192" type="image/png" href="/icon-192.png" />
+    <link rel="icon" sizes="512x512" type="image/png" href="/icon-512.png" />
+    <link rel="icon" sizes="48x48" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="./src/design-system/assets/fonts/Gloock-Regular-latin.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="./src/design-system/assets/fonts/HankenGrotesk-latin.woff2" />
+    <link rel="stylesheet" href="./src/app.css" />
+    <script type="module" src="./src/main.ts"></script>
+  </head>
+  <body>
+    <div id="launch" class="cl-launch" role="status" aria-label="Loading Cellar">
+      <p class="cl-wordmark cl-wordmark-lg"><span class="cl-mark" aria-hidden="true"></span>Cellar</p>
+      <div class="cl-launch-bar" aria-hidden="true"><i></i></div>
+    </div>
+    <div id="app"></div>
+  </body>
+</html>

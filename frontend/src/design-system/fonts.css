@@ -1,0 +1,15 @@
+@font-face {
+  font-family: "Gloock";
+  src: url("./assets/fonts/Gloock-Regular-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("./assets/fonts/HankenGrotesk-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

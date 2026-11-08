@@ -1,0 +1,15 @@
+:where(.cl-qr, cl-qr) {
+  display: inline-block;
+  width: var(--qr);
+  height: var(--qr);
+  padding: var(--qr-pad);
+  border-radius: var(--radius-sm);
+  background: var(--qr-bg);
+
+  & [part~="cl-qr-code"] {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: var(--qr-ink);
+  }
+}
