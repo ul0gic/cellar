@@ -1,6 +1,9 @@
 import type { IngredientNode, IngredientSummary } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventPage, eventText } from '../../app/events.ts';
+import { type LoadState, type Watched, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
@@ -9,16 +12,7 @@ import { illustration } from '../../design-system/illustration.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatCount, formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import {
-  actionFailed,
-  eventPage,
-  eventText,
-  follow,
-  type LoadState,
-  waiting,
-  watch,
-  wide,
-} from '../shelf/parts/kit.ts';
+import { follow, onWidth, waiting, wide } from '../shelf/parts/kit.ts';
 import './ingredients.css';
 
 // D-1 §9.7: the tree shows 100 rows per page.
@@ -26,7 +20,7 @@ const PAGE_SIZE = 100;
 // Typing settles for this long before the list query runs.
 const TYPE_SETTLE_MS = 250;
 
-type Filter = 'on-hand' | 'has-bottles';
+type Filter = 'on-hand' | 'has-bottles' | 'house-made';
 
 interface Row {
   readonly id: number;
@@ -38,7 +32,7 @@ interface Row {
 }
 
 function filterOf(value: string | null): Filter | null {
-  return value === 'on-hand' || value === 'has-bottles' ? value : null;
+  return value === 'on-hand' || value === 'has-bottles' || value === 'house-made' ? value : null;
 }
 
 function idOf(value: string | null): number | null {
@@ -52,6 +46,32 @@ function bottles(count: number): string {
 
 function recipes(count: number): string {
   return formatCount(count, text('ingredients.recipeOne'), text('ingredients.recipeMany'));
+}
+
+function usage(recipeCount: number, bottleCount: number): string {
+  if (recipeCount > 0 && bottleCount > 0) {
+    return text('ingredients.inRecipesBottles', { recipes: recipes(recipeCount), bottles: bottles(bottleCount) });
+  }
+  if (recipeCount > 0) {
+    return text('ingredients.inRecipes', { recipes: recipes(recipeCount) });
+  }
+  return bottleCount > 0 ? bottles(bottleCount) : '';
+}
+
+function treeCounts(node: IngredientNode): string {
+  const counts = usage(node.recipeCount, node.bottleCount);
+  if (counts !== '' || node.childCount === 0) {
+    return counts;
+  }
+  return formatCount(node.childCount, text('ingredients.kindOne'), text('ingredients.kindMany'));
+}
+
+function chipCounts(nodes: readonly IngredientNode[]): { onHand: number; hasBottles: number; houseMade: number } {
+  return {
+    onHand: nodes.filter((node) => node.onHand).length,
+    hasBottles: nodes.filter((node) => node.bottleCount > 0).length,
+    houseMade: nodes.filter((node) => node.houseMade).length,
+  };
 }
 
 function subtree(nodes: readonly IngredientNode[], rootId: number | null): IngredientNode[] {
@@ -74,29 +94,20 @@ function treeRow(node: IngredientNode): Row {
     depth: node.depth,
     onHand: node.onHand,
     bottleCount: node.bottleCount,
-    sub:
-      node.depth === 0
-        ? node.childCount === 0
-          ? ''
-          : formatCount(node.childCount, text('ingredients.kindOne'), text('ingredients.kindMany'))
-        : node.bottleCount > 0
-          ? bottles(node.bottleCount)
-          : '',
+    sub: treeCounts(node),
   };
 }
 
 function summaryRow(item: IngredientSummary): Row {
-  const counts =
-    item.bottleCount > 0
-      ? text('ingredients.inRecipesBottles', { recipes: recipes(item.recipeCount), bottles: bottles(item.bottleCount) })
-      : text('ingredients.inRecipes', { recipes: recipes(item.recipeCount) });
+  const counts = usage(item.recipeCount, item.bottleCount);
+  const under = item.parent === null ? '' : text('ingredients.under', { parent: item.parent.name });
   return {
     id: item.id,
     name: item.name,
     depth: 1,
     onHand: item.onHand,
     bottleCount: item.bottleCount,
-    sub: item.parent === null ? counts : `${text('ingredients.under', { parent: item.parent.name })}. ${counts}`,
+    sub: under === '' ? counts : counts === '' ? under : `${under}. ${counts}`,
   };
 }
 
@@ -107,7 +118,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   const busy = new Set<number>();
   let typed = ctx.query.get('q') ?? '';
   let typeTimer: ReturnType<typeof setTimeout> | null = null;
-  let stop: (() => void) | null = null;
+  let watched: Watched | null = null;
 
   const pageOf = (): number => idOf(ctx.query.get('page')) ?? 1;
 
@@ -125,6 +136,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ...(q === '' ? {} : { q }),
           ...(filter === 'on-hand' ? { onHand: 'true' } : {}),
           ...(filter === 'has-bottles' ? { hasBottles: 'true' } : {}),
+          ...(filter === 'house-made' ? { houseMade: 'true' } : {}),
           ...(root === null ? {} : { root }),
           page: pageOf(),
           pageSize: PAGE_SIZE,
@@ -229,7 +241,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     if (q !== '') {
       return html`<lc-empty-state title=${text('ingredients.noMatchTitle', { q })} description=${text('ingredients.noMatchBody')}>
         ${illustration('empty-glass')}
-        <lc-button variant="primary" href=${`/ingredients/new?name=${encodeURIComponent(q)}`}
+        <lc-button variant="primary" href=${href(`/ingredients/new?name=${encodeURIComponent(q)}`)}
           >${text('ingredients.create', { q })}</lc-button
         >
       </lc-empty-state>`;
@@ -248,8 +260,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     const category = idOf(ctx.query.get('category'));
     const list = listFor();
     const roots = nodes?.filter((node) => node.depth === 0) ?? [];
-    const onHandCount = nodes?.filter((node) => node.onHand).length ?? 0;
-    const bottledCount = nodes?.filter((node) => node.bottleCount > 0).length ?? 0;
+    const counts = chipCounts(nodes ?? []);
     const chip = (value: Filter, label: string, count: number): TemplateResult => html`<button
       type="button"
       class="cl-kit-chip"
@@ -289,7 +300,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           nodes === undefined
             ? nothing
             : html`<cl-figure
-                value=${onHandCount}
+                value=${counts.onHand}
                 label=${text('ingredients.figureLabel', { total: formatNumber(nodes.length) })}
                 sublabel=${text('ingredients.figureSub')}
               ></cl-figure>`
@@ -316,15 +327,16 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ></lc-select>
           ${
             wide.matches
-              ? html`<lc-button variant="primary" href="/ingredients/new">
+              ? html`<lc-button variant="primary" href=${href('/ingredients/new')}>
                   <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('ingredients.new')}
                 </lc-button>`
               : nothing
           }
         </div>
         <div class="cl-kit-chips" role="group" aria-label=${text('ingredients.filtersLabel')}>
-          ${chip('on-hand', text('ingredients.chip.onHand'), onHandCount)}
-          ${chip('has-bottles', text('ingredients.chip.hasBottles'), bottledCount)}
+          ${chip('on-hand', text('ingredients.chip.onHand'), counts.onHand)}
+          ${chip('has-bottles', text('ingredients.chip.hasBottles'), counts.hasBottles)}
+          ${chip('house-made', text('ingredients.chip.houseMade'), counts.houseMade)}
         </div>
         ${body}
       `,
@@ -333,9 +345,9 @@ export function screen(ctx: ScreenContext): HTMLElement {
   };
 
   function start(): void {
-    stop?.();
+    watched?.stop();
     const list = listFor();
-    stop = watch(element, list === null ? [tree] : [tree, list], draw);
+    watched = watch(element, list === null ? [tree] : [tree, list], draw);
   }
 
   follow(element, ctx.query.subscribe, () => {
@@ -345,6 +357,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     start();
   });
   start();
+  onWidth(element, () => watched?.redraw());
   const add = document.createElement('a');
   add.className = 'cl-icon-button';
   add.href = href('/ingredients/new');

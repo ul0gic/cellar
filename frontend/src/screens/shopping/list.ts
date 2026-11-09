@@ -2,13 +2,16 @@ import { LIMITS, type ShoppingList, type ShoppingListItem } from '@cellar/contra
 import type { SearchDoc } from '@lightstart/light/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventChecked, eventNumber } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
+import { href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
 import { illustration } from '../../design-system/illustration.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatDate, formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { attempt, eventChecked, eventNumber, type LoadState, waiting, watch, wide } from '../shelf/parts/kit.ts';
+import { attempt, onWidth, waiting, wide } from '../shelf/parts/kit.ts';
 import './shopping.css';
 
 function linesOf(list: ShoppingList): string {
@@ -134,7 +137,7 @@ export function screen(): HTMLElement {
     current.items.length === 0
       ? html`<lc-empty-state title=${text('shopping.emptyTitle')} description=${text('shopping.emptyBody')}>
           ${illustration('empty-list')}
-          <lc-button variant="primary" href="/">${text('shopping.seeBuyNext')}</lc-button>
+          <lc-button variant="primary" href=${href('/')}>${text('shopping.seeBuyNext')}</lc-button>
         </lc-empty-state>`
       : html`<p class="cl-kit-meta">
             ${text('shopping.countLine', {
@@ -150,7 +153,7 @@ export function screen(): HTMLElement {
     const current = list.peek();
     const lines = current === undefined ? '' : linesOf(current);
     clipboard.text = lines;
-    print.href = '/list/print';
+    print.href = href('/list/print');
     render(
       html`
         <div class="cl-kit-head">
@@ -159,7 +162,7 @@ export function screen(): HTMLElement {
             wide.matches && current !== undefined && current.items.length > 0
               ? html`<div class="cl-kit-head-actions">
                   <lc-clipboard .text=${lines} label=${text('shopping.copy')} @copy=${copied}></lc-clipboard>
-                  <lc-button variant="quiet" href="/list/print">
+                  <lc-button variant="quiet" href=${href('/list/print')}>
                     <lc-icon name="printer" aria-hidden="true"></lc-icon>${text('shopping.print')}
                   </lc-button>
                 </div>`
@@ -188,7 +191,8 @@ export function screen(): HTMLElement {
     );
   };
 
-  watch(element, [list, tree], draw);
+  const watched = watch(element, [list, tree], draw);
+  onWidth(element, watched.redraw);
   setAppBar({ actions: [clipboard, print] });
   return element;
 }

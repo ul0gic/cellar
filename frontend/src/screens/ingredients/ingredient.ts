@@ -1,9 +1,12 @@
-import type { Ingredient, LineCoverage, Note, RatingValue, RecipeSummary, Visibility } from '@cellar/contract';
+import type { Ingredient, LineCoverage, Note, RatingValue, RecipeSummary, Verdict, Visibility } from '@cellar/contract';
 import type { LightElements } from '@lightstart/light/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventField, eventText } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
+import { today } from '../../app/today.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import type { HaveSegment } from '../../design-system/cl-have-bar.ts';
 import { plateForIngredient } from '../../design-system/cl-plate.ts';
@@ -11,8 +14,8 @@ import { confirm } from '../../design-system/dialogs.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatCount, formatDate, formatNumber } from '../../text/format.ts';
-import { text } from '../../text/index.ts';
-import { attempt, eventText, eventValue, type LoadState, sheet, today, waiting, watch } from '../shelf/parts/kit.ts';
+import { type TextKey, text } from '../../text/index.ts';
+import { attempt, sheet, waiting } from '../shelf/parts/kit.ts';
 import './ingredients.css';
 
 type Dropdown = LightElements['lc-dropdown'];
@@ -45,6 +48,16 @@ function ratingOf(value: number): RatingValue | null {
   return RATINGS.find((rating) => rating === value) ?? null;
 }
 
+const VERDICT_LABELS = {
+  avoid: 'ingredients.verdictAvoid',
+  decent: 'ingredients.verdictDecent',
+  recommend: 'ingredients.verdictRecommend',
+} as const satisfies Record<Verdict, TextKey>;
+
+function verdictOf(value: unknown): Verdict | null {
+  return value === 'avoid' || value === 'decent' || value === 'recommend' ? value : null;
+}
+
 function visibilityOf(value: unknown, fallback: Visibility): Visibility {
   return value === 'household' || value === 'private' ? value : fallback;
 }
@@ -69,6 +82,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
   let noteOpen = false;
   let noteText = '';
   let noteWords: string[] = [];
+  let noteTastedOn = today();
+  let noteVerdict: Verdict | null = null;
   let noteVisibility: Visibility = ctx.person.current()?.person.defaultVisibility ?? 'household';
   let noteError = '';
   let titled = false;
@@ -140,15 +155,17 @@ export function screen(ctx: ScreenContext): HTMLElement {
         params: { id: item.id },
         body: {
           text: noteText,
-          tastedOn: today(),
+          tastedOn: noteTastedOn,
           descriptorIds: known.filter((word) => noteWords.includes(String(word.id))).map((word) => word.id),
-          verdict: null,
+          verdict: noteVerdict,
           visibility: noteVisibility,
         },
       });
       noteOpen = false;
       noteText = '';
       noteWords = [];
+      noteTastedOn = today();
+      noteVerdict = null;
       toast({ title: text('ingredients.noteSaved') });
       invalidate('notes', 'stats');
     });
@@ -157,9 +174,11 @@ export function screen(ctx: ScreenContext): HTMLElement {
     const sure = await confirm({
       title: text('ingredients.deleteTitle', { name: item.name }),
       message:
-        item.bottles.onShelf.length > 0
-          ? text('ingredients.deleteBodyBottles', { count: formatNumber(item.bottles.onShelf.length) })
-          : text('ingredients.deleteBody'),
+        item.bottles.onShelf.length === 0
+          ? text('ingredients.deleteBody')
+          : item.bottles.onShelf.length === 1
+            ? text('ingredients.deleteBodyBottle')
+            : text('ingredients.deleteBodyBottles', { count: formatNumber(item.bottles.onShelf.length) }),
       confirmLabel: text('ingredients.deleteConfirm'),
       danger: true,
     });
@@ -169,6 +188,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     await attempt(async () => {
       await call('deleteIngredient', { params: { id: item.id } });
       toast({ title: text('ingredients.deleted', { name: item.name }) });
+      stopWatching();
       invalidate('ingredients', 'recipes', 'shelf', 'stats');
       ctx.navigate('/ingredients', { replace: true });
     });
@@ -199,9 +219,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </span>
     ${note.text === '' ? nothing : html`<p class="cl-ingr-note-text">${note.text}</p>`}
     ${
-      note.descriptors.length === 0
+      note.descriptors.length === 0 && note.verdict === null
         ? nothing
-        : html`<span class="cl-ingr-tags">${note.descriptors.map((word) => html`<lc-tag size="sm">${word.name}</lc-tag>`)}</span>`
+        : html`<span class="cl-ingr-tags">
+            ${note.verdict === null ? nothing : html`<lc-tag size="sm">${text(VERDICT_LABELS[note.verdict])}</lc-tag>`}
+            ${note.descriptors.map((word) => html`<lc-tag size="sm">${word.name}</lc-tag>`)}
+          </span>`
     }
   </li>`;
 
@@ -221,6 +244,14 @@ export function screen(ctx: ScreenContext): HTMLElement {
             noteText = eventText(event);
           }}
         ></lc-textarea>
+        <lc-input
+          type="date"
+          label=${text('ingredients.noteTastedOn')}
+          .value=${noteTastedOn}
+          @input=${(event: Event) => {
+            noteTastedOn = eventText(event);
+          }}
+        ></lc-input>
         <lc-select
           multiple
           searchable
@@ -228,10 +259,23 @@ export function screen(ctx: ScreenContext): HTMLElement {
           .options=${(descriptors.peek()?.items ?? []).map((word) => ({ value: String(word.id), label: word.name }))}
           .value=${noteWords}
           @change=${(event: Event) => {
-            const value = eventValue(event);
+            const value = eventField(event, 'value');
             noteWords = Array.isArray(value) ? value.filter((word): word is string => typeof word === 'string') : [];
           }}
         ></lc-select>
+        <lc-segmented
+          label=${text('ingredients.noteVerdict')}
+          .options=${[
+            { value: 'avoid', label: text(VERDICT_LABELS.avoid) },
+            { value: 'decent', label: text(VERDICT_LABELS.decent) },
+            { value: 'recommend', label: text(VERDICT_LABELS.recommend) },
+            { value: 'none', label: text('ingredients.verdictNone') },
+          ]}
+          value=${noteVerdict ?? 'none'}
+          @change=${(event: Event) => {
+            noteVerdict = verdictOf(eventField(event, 'value'));
+          }}
+        ></lc-segmented>
         <lc-segmented
           label=${text('ingredients.noteVisibility')}
           .options=${[
@@ -240,7 +284,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ]}
           value=${noteVisibility}
           @change=${(event: Event) => {
-            noteVisibility = visibilityOf(eventValue(event), noteVisibility);
+            noteVisibility = visibilityOf(eventField(event, 'value'), noteVisibility);
           }}
         ></lc-segmented>
         ${noteError === '' ? nothing : html`<p class="cl-kit-error" role="alert">${noteError}</p>`}
@@ -500,6 +544,6 @@ export function screen(ctx: ScreenContext): HTMLElement {
     render(item === undefined ? waiting(current, ingredient, text('title.ingredient'), 'lines') : page(item), element);
   };
 
-  watch(element, [ingredient, usedIn, notes], draw);
+  const stopWatching = watch(element, [ingredient, usedIn, notes], draw).stop;
   return element;
 }

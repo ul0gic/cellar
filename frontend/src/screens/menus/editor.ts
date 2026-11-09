@@ -15,8 +15,11 @@ import { registerFormFieldRenderer } from '@lightstart/light/components/form/fie
 import type { FormField, SearchDoc } from '@lightstart/light/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventChecked, eventDetail, eventText } from '../../app/events.ts';
+import { slowFlag } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate } from '../../app/resources.ts';
-import { router } from '../../app/router.ts';
+import { href, router } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { confirm } from '../../design-system/dialogs.ts';
@@ -25,7 +28,6 @@ import { skeleton } from '../../design-system/skeleton.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
-import { actionFailed } from './support.ts';
 import './editor.css';
 
 interface Drink {
@@ -154,27 +156,6 @@ function tierText(count: number): string {
   return text('menus.tierPaged', { count: drinks, pages: Math.ceil(count / PAGE_SIZE) });
 }
 
-function detailValue(event: Event): unknown {
-  if (!(event instanceof CustomEvent)) {
-    return undefined;
-  }
-  const detail: unknown = event.detail;
-  return detail;
-}
-
-function changedText(event: Event): string {
-  const detail = detailValue(event);
-  if (typeof detail === 'object' && detail !== null && 'value' in detail && typeof detail.value === 'string') {
-    return detail.value;
-  }
-  return event.target instanceof HTMLInputElement ? event.target.value : '';
-}
-
-function changedCheck(event: Event): boolean {
-  const detail = detailValue(event);
-  return typeof detail === 'object' && detail !== null && 'checked' in detail && detail.checked === true;
-}
-
 function recipeDoc(recipe: RecipeSummary, group: string): SearchDoc {
   const id = `recipe:${recipe.id}`;
   picked.set(id, {
@@ -218,7 +199,7 @@ function neatDoc(ingredient: IngredientSummary): SearchDoc {
 
 async function findDrinks(event: Event): Promise<void> {
   const search = event.currentTarget instanceof Element ? event.currentTarget.closest('lc-search') : null;
-  const typed = detailValue(event);
+  const typed = eventDetail(event);
   if (search === null || typeof typed !== 'string') {
     return;
   }
@@ -241,7 +222,7 @@ async function findDrinks(event: Event): Promise<void> {
 }
 
 function pickDrink(event: Event, onChange: (value: unknown) => void): void {
-  const doc = detailValue(event);
+  const doc = eventDetail(event);
   if (typeof doc !== 'object' || doc === null || !('id' in doc) || typeof doc.id !== 'string') {
     return;
   }
@@ -270,7 +251,7 @@ registerFormFieldRenderer('menu-section', (_field, value, onChange, template) =>
     maxlength=${LIMITS.sectionName.max}
     required
     .value=${stringOf(value)}
-    @input=${(event: Event) => onChange(changedText(event))}
+    @input=${(event: Event) => onChange(eventText(event))}
   />`;
 });
 
@@ -303,13 +284,13 @@ registerFormFieldRenderer('menu-item', (_field, value, onChange, template) => {
         label=${text('menus.hostNote', { name: value.name })}
         value=${value.hostNote}
         hint=${left <= NOTE_COUNTER_FROM ? text('menus.left', { count: Math.max(left, 0) }) : nothing}
-        @input=${(event: Event) => onChange({ ...value, hostNote: changedText(event).slice(0, LIMITS.hostNote.max) })}
+        @input=${(event: Event) => onChange({ ...value, hostNote: eventText(event).slice(0, LIMITS.hostNote.max) })}
       ></lc-input>
       <div class="cl-menu-item-options">
         <lc-switch
           label=${text('menus.hide')}
           ?checked=${value.hideWhenUnavailable}
-          @change=${(event: Event) => onChange({ ...value, hideWhenUnavailable: changedCheck(event) })}
+          @change=${(event: Event) => onChange({ ...value, hideWhenUnavailable: eventChecked(event) })}
         ></lc-switch>
         ${hiddenNow ? template`<lc-tag class="cl-menu-item-hidden">${text('menus.hiddenNow')}</lc-tag>` : nothing}
       </div>
@@ -340,9 +321,35 @@ export function screen(ctx: ScreenContext): HTMLElement {
     phase = 'ready';
   };
 
+  const discardIfBlank = async (): Promise<void> => {
+    const blank =
+      menu !== null &&
+      !menu.live &&
+      menu.sections.length === 0 &&
+      menu.name === text('menus.newName') &&
+      menu.updatedAt === menu.createdAt;
+    if (!blank) {
+      return;
+    }
+    try {
+      await call('deleteMenu', { params: { id } });
+    } catch (error) {
+      if (!(error instanceof ApiError && error.code === 'not_found')) {
+        actionFailed(error, () => void discardIfBlank());
+        return;
+      }
+    }
+    invalidate('menus');
+  };
+
   const release = router.block(async () => {
-    if (!element.isConnected || !dirty) {
+    if (!element.isConnected) {
       release();
+      return true;
+    }
+    if (!dirty) {
+      release();
+      await discardIfBlank();
       return true;
     }
     const leave = await confirm({
@@ -354,6 +361,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     });
     if (leave) {
       release();
+      await discardIfBlank();
     }
     return leave;
   });
@@ -446,11 +454,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
       });
       apply(result.menu);
       invalidate('menus');
+      const addedDrinks = result.added === 1 ? text('menus.drink') : text('menus.drinks', { count: result.added });
       toast({
         title:
           result.skippedForLimit === 0
-            ? text('menus.addAllDone', { count: result.added })
-            : text('menus.addAllSkipped', { added: result.added, skipped: result.skippedForLimit }),
+            ? text('menus.addAllDone', { drinks: addedDrinks })
+            : text('menus.addAllSkipped', { drinks: addedDrinks, skipped: result.skippedForLimit }),
       });
     } catch (error) {
       if (!(error instanceof ApiError && showFieldErrors(error))) {
@@ -625,7 +634,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     description=${text('menus.notFoundBody')}
   >
     ${illustration('empty-menu')}
-    <lc-button variant="primary" href="/menus">${text('menus.backToMenus')}</lc-button>
+    <lc-button variant="primary" href=${href('/menus')}>${text('menus.backToMenus')}</lc-button>
   </lc-empty-state>`;
 
   const editor = (current: Menu): TemplateResult => {
@@ -671,13 +680,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
     }
     phase = 'waiting';
     draw();
-    // D-1 §8.26: skeletons appear only when a response takes longer than 300 ms.
-    setTimeout(() => {
+    slowFlag(() => {
       if (phase === 'waiting') {
         phase = 'slow';
         draw();
       }
-    }, 300);
+    });
     try {
       const [loaded, live, can] = await Promise.all([
         call('getMenu', { params: { id } }),

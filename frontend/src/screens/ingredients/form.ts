@@ -8,13 +8,16 @@ import {
 } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
-import { setScreenTitle } from '../../app/router.ts';
+import { href, setScreenTitle } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import type { ImageUpload } from '../../design-system/cl-image-field.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
-import { actionFailed, eventText, fieldError, type LoadState, waiting, watch } from '../shelf/parts/kit.ts';
+import { fieldError, waiting } from '../shelf/parts/kit.ts';
 import './ingredients.css';
 
 const COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -372,7 +375,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       <div class="cl-kit-sheet-footer">
         <lc-button
           variant="quiet"
-          href=${editing === null ? '/ingredients' : `/ingredients/${editing}`}
+          href=${href(editing === null ? '/ingredients' : `/ingredients/${editing}`)}
           >${text('action.cancel')}</lc-button
         >
         <lc-button variant="primary" type="submit" ?disabled=${saving || uploading} aria-busy=${saving ? 'true' : nothing}

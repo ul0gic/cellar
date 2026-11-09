@@ -1,11 +1,11 @@
 import { type ImageRef, LIMITS, type Recipe } from '@cellar/contract';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../../app/api.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
 import { thumbHashDataUrl } from '../../../design-system/thumbhash.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
-import { actionFailed } from './failures.ts';
 import { recipeInputOf } from './recipe-input.ts';
 import { openSheet } from './sheet.ts';
 

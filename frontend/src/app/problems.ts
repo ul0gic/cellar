@@ -1,6 +1,6 @@
-import { AUTH_CODES, ApiError } from '../../../app/api.ts';
-import { toast } from '../../../design-system/toast.ts';
-import { text } from '../../../text/index.ts';
+import { toast } from '../design-system/toast.ts';
+import { text } from '../text/index.ts';
+import { AUTH_CODES, ApiError } from './api.ts';
 
 const SECONDS_PER_MINUTE = 60;
 

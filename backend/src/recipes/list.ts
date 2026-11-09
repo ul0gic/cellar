@@ -12,6 +12,7 @@ interface Candidate {
   readonly id: Id;
   readonly foldedName: string;
   readonly createdAt: string;
+  readonly rank: number | null;
   missingCount: number;
   rating: number | null;
   abv: number | null;
@@ -68,19 +69,22 @@ export function listRecipes(ctx: AppContext, query: RecipeListQuery, viewer: Id)
   const db = ctx.db;
   const { sql, params } = whereClauses(query, viewer);
   const rows = db.prepare(`SELECT r.id, r.folded_name, r.created_at FROM recipes r ${sql}`).all(...params);
-  const matched = query.q === undefined ? null : new Set(searchRecipeIds(db, query.q));
+  const rank =
+    query.q === undefined ? null : new Map(searchRecipeIds(db, query.q).map((id, index) => [id, index] as const));
   let candidates: Candidate[] = rows
     .map((row) => ({
       id: num(row, 'id'),
       foldedName: text(row, 'folded_name'),
       createdAt: text(row, 'created_at'),
+      rank: rank?.get(num(row, 'id')) ?? null,
       missingCount: 0,
       rating: null,
       abv: null,
     }))
-    .filter((candidate) => matched === null || matched.has(candidate.id));
+    .filter((candidate) => rank === null || candidate.rank !== null);
 
-  const sort = query.sort ?? 'name';
+  const requested = query.sort ?? (rank === null ? 'name' : 'relevance');
+  const sort = requested === 'relevance' && rank === null ? 'name' : requested;
   if (query.ratingMin !== undefined || sort === 'rating') {
     const averages = householdAverages(db, 'recipe');
     for (const candidate of candidates) {
@@ -135,6 +139,7 @@ export function listRecipes(ctx: AppContext, query: RecipeListQuery, viewer: Id)
   const byName = (a: Candidate, b: Candidate): number =>
     a.foldedName < b.foldedName ? -1 : a.foldedName > b.foldedName ? 1 : a.id - b.id;
   const comparators: Record<typeof sort, (a: Candidate, b: Candidate) => number> = {
+    relevance: (a, b) => compareNullsLast(a.rank, b.rank, 1) || byName(a, b),
     name: (a, b) => byName(a, b) * direction,
     added: (a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id) * direction,
     rating: (a, b) => compareNullsLast(a.rating, b.rating, direction) || byName(a, b),

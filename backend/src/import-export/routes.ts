@@ -63,7 +63,7 @@ export function register(app: FastifyInstance, ctx: AppContext): void {
       file,
       mode,
       duplicate,
-      unmatchedParentId,
+      unmatchedParentId: unmatchedParentId ?? null,
       fetchRemoteImages,
       memberId: personOf(request).id,
     });

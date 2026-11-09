@@ -1,19 +1,20 @@
 import { LIMITS, type Recipe, type Visibility } from '@cellar/contract';
 import { html, nothing } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
+import { eventText } from '../../../app/events.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
+import { today } from '../../../app/today.ts';
 import type { SessionPerson } from '../../../app/types.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
-import { eventText } from './events.ts';
-import { actionFailed } from './failures.ts';
 import { ratingControl } from './rating.ts';
 import { openSheet } from './sheet.ts';
-import { today } from './today.ts';
 
 export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Promise<void> {
   const { items: descriptors } = await call('listDescriptors', {});
   let note = '';
+  let tastedOn = today();
   let chosen = new Set<number>();
   let visibility: Visibility = session.person.defaultVisibility;
   let rating = recipe.mine.rating?.value ?? 0;
@@ -36,7 +37,7 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
     try {
       await call('createRecipeNote', {
         params: { id: recipe.id },
-        body: { text: note, tastedOn: today(), descriptorIds: [...chosen], verdict: null, visibility },
+        body: { text: note, tastedOn, descriptorIds: [...chosen], verdict: null, visibility },
       });
       invalidate('notes', 'recipes', 'stats');
       sheet.close();
@@ -68,8 +69,18 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
         value=${note}
         @input=${(event: Event) => {
           note = eventText(event);
+          sheet.redraw();
         }}
       ></lc-textarea>
+      <lc-input
+        type="date"
+        label=${text('recipes.tastedOn')}
+        .value=${tastedOn}
+        @input=${(event: Event) => {
+          tastedOn = eventText(event);
+          sheet.redraw();
+        }}
+      ></lc-input>
       <fieldset class="cl-sheet-section">
         <legend class="cl-sheet-label">${text('recipes.tastesLike')}</legend>
         <div class="cl-sheet-chips">
@@ -107,7 +118,7 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
       <lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
       <lc-button
         variant="primary"
-        ?disabled=${saving || (note.trim() === '' && chosen.size === 0)}
+        ?disabled=${saving || tastedOn === '' || (note.trim() === '' && chosen.size === 0)}
         aria-busy=${saving ? 'true' : nothing}
         @click=${() => void save()}
       >${text('recipes.saveNote')}</lc-button>

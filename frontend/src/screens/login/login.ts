@@ -1,11 +1,11 @@
 import type { Session } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { problemText } from '../../app/problems.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { armFirstArrival } from '../../design-system/motion.ts';
 import { text } from '../../text/index.ts';
-import { eventValue } from '../settings/parts/events.ts';
-import { problemText } from '../settings/parts/problems.ts';
 import { holdOneTimePassword, nextPath } from './parts/handoff.ts';
 import { arrivalNotice } from './parts/notices.ts';
 import { stage } from './parts/stage.ts';
@@ -119,7 +119,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
               .value=${name}
               error-message=${nameError}
               @input=${(event: Event) => {
-                name = eventValue(event);
+                name = eventText(event);
               }}
             ></lc-input>
             <lc-input
@@ -130,7 +130,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
               .value=${password}
               error-message=${passwordError}
               @input=${(event: Event) => {
-                password = eventValue(event);
+                password = eventText(event);
               }}
             ></lc-input>
           </div>

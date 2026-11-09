@@ -1,15 +1,16 @@
 import { type HouseholdSettings, LIMITS } from '@cellar/contract';
 import { html, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed, fieldError } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
-import { eventValue } from './parts/events.ts';
 import { settingsPage } from './parts/frame.ts';
-import { actionFailed, fieldError } from './parts/problems.ts';
-import { loadFailed, watch } from './parts/watch.ts';
+import { loadFailed } from './parts/load-failed.ts';
 
 export function screen(ctx: ScreenContext): HTMLElement {
   return settingsPage(ctx, 'ai', (main) => {
@@ -86,7 +87,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           error-message=${keyError}
           hint=${text('settings.ai.hint')}
           @input=${(event: Event) => {
-            key = eventValue(event);
+            key = eventText(event);
           }}
         ></lc-input>
       </div>
@@ -116,13 +117,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       }
     </section>`;
 
-    const redraw = watch(main, [settings], ({ state, retry }) => {
+    const { redraw } = watch(main, [settings], ({ phase, retry }) => {
       const current = settings.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.ai'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('lines', text('settings.ai')), main);
-      } else if (state === 'ready' && current !== undefined) {
+      } else if (phase === 'ready' && current !== undefined) {
         render(view(current), main);
       }
     });

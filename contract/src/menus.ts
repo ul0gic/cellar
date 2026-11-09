@@ -92,6 +92,7 @@ export const MenuSchema = z
     date: IsoDateSchema,
     live: z.boolean(),
     link: MenuLinkSchema.nullable(),
+    endedAt: IsoDateTimeSchema.nullable(),
     sections: z.array(MenuSectionSchema),
     createdBy: MemberRefSchema.nullable(),
     createdAt: IsoDateTimeSchema,
@@ -106,6 +107,7 @@ export const MenuSummarySchema = z
     name: z.string(),
     date: IsoDateSchema,
     live: z.boolean(),
+    endedAt: IsoDateTimeSchema.nullable(),
     itemCount: z.int().min(0),
     updatedAt: IsoDateTimeSchema,
   })

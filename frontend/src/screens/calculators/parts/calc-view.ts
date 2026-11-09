@@ -8,6 +8,9 @@ import {
 } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
+import { eventText } from '../../../app/events.ts';
+import { type LoadState, watch } from '../../../app/load.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { resourceFor } from '../../../app/resources.ts';
 import { setScreenTitle } from '../../../app/router.ts';
 import type { ScreenContext } from '../../../app/types.ts';
@@ -16,9 +19,6 @@ import { illustration } from '../../../design-system/illustration.ts';
 import { skeleton } from '../../../design-system/skeleton.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
-import { eventText } from '../../recipes/parts/events.ts';
-import { actionFailed } from '../../recipes/parts/failures.ts';
-import { errorOf, onLeave, reload, slowFlag, watch } from '../../recipes/parts/view.ts';
 import './calc-view.css';
 
 type Mode = { readonly kind: 'use' } | { readonly kind: 'edit'; readonly id: number | null; draft: CalculatorInput };
@@ -57,7 +57,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
   let values: Record<string, number | null> = {};
   let shownId: number | null = null;
   let saving = false;
-  const slow = slowFlag(() => draw());
+  let loadState: LoadState | null = null;
 
   const selected = (): Calculator | null => {
     const calculators = list.peek()?.calculators ?? [];
@@ -359,22 +359,21 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
 
   const draw = (): void => {
     const data = list.peek();
-    const problem = errorOf(list);
+    const problem = loadState?.error(list) ?? null;
     if (data === undefined) {
       if (problem !== null) {
         render(
           html`<lc-empty-state title=${text('loadFailed.title', { screen: text('nav.calculators') })} description=${text('loadFailed.body')}>
             ${illustration('empty-lost')}
-            <lc-button variant="primary" @click=${() => reload(list)}>${text('loadFailed.retry')}</lc-button>
+            <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
           </lc-empty-state>`,
           element,
         );
-      } else if (slow.slow() && element.querySelector('.cl-skeleton') === null) {
+      } else if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
         element.replaceChildren(skeleton('rows', text('nav.calculators')));
       }
       return;
     }
-    slow.cancel();
     element.querySelector('.cl-skeleton')?.remove();
     const calculator = selected();
     if (calculator !== null) {
@@ -409,10 +408,9 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
     );
   };
 
-  const stop = watch(list, draw);
-  onLeave(element, () => {
-    slow.cancel();
-    stop();
+  watch(element, [list], (state) => {
+    loadState = state;
+    draw();
   });
   return element;
 }

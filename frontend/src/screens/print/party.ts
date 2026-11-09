@@ -56,7 +56,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                   ? html`<td colspan="2">${countsText(line)}</td>`
                   : html`<td class="cl-print-num">${mlText(line)}</td><td class="cl-print-num">${ozText(line)}</td>`
               }
-              <td>${line.satisfied ? text('print.yes') : text('print.no')}</td>
+              <td>${line.satisfied ? text('print.yes') : line.optionalOnly ? text('print.optional') : text('print.no')}</td>
             </tr>`,
           )}
         </tbody>

@@ -2,7 +2,11 @@ import type { BottlePage, BottleStatus, BottleSummary } from '@cellar/contract';
 import type { LightElements } from '@lightstart/light/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventChecked, eventField, eventPage, eventText } from '../../app/events.ts';
+import { type LoadState, type Watched, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
+import { href } from '../../app/router.ts';
+import { today } from '../../app/today.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { illustration } from '../../design-system/illustration.ts';
@@ -11,22 +15,7 @@ import { toast } from '../../design-system/toast.ts';
 import { formatDate, formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
 import { type BottleDraft, bottleSheet } from './parts/bottle-sheet.ts';
-import {
-  attempt,
-  eventChecked,
-  eventPage,
-  eventText,
-  eventValue,
-  follow,
-  type LoadState,
-  money,
-  pricesSwitch,
-  sheet,
-  today,
-  waiting,
-  watch,
-  wide,
-} from './parts/kit.ts';
+import { attempt, follow, money, onWidth, pricesSwitch, sheet, waiting, wide } from './parts/kit.ts';
 import './shelf.css';
 
 type Dropdown = LightElements['lc-dropdown'];
@@ -98,7 +87,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   let filtersOpen = false;
   let typed = ctx.query.get('q') ?? '';
   let typeTimer: ReturnType<typeof setTimeout> | null = null;
-  let stop: (() => void) | null = null;
+  let watched: Watched | null = null;
   let state: LoadState | null = null;
   const redraw = (): void => {
     if (state !== null) {
@@ -441,7 +430,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       : html`<lc-empty-state title=${text('shelf.emptyTitle')} description=${text('shelf.emptyBody')}>
           ${illustration('empty-shelf')}
           <lc-button variant="primary" @click=${() => bottles.openAdd(null)}>${text('shelf.add')}</lc-button>
-          <lc-button variant="quiet" href="/import">${text('shelf.importCsv')}</lc-button>
+          <lc-button variant="quiet" href=${href('/import')}>${text('shelf.importCsv')}</lc-button>
         </lc-empty-state>`;
 
   const pager = (page: BottlePage): TemplateResult | typeof nothing => {
@@ -488,7 +477,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
             ></cl-figure>`
       }
       <div class="cl-kit-head-actions">
-        <lc-button variant="quiet" href="/shelf/history">
+        <lc-button variant="quiet" href=${href('/shelf/history')}>
           <lc-icon name="history" aria-hidden="true"></lc-icon>${text('shelf.history')}
         </lc-button>
         <lc-button variant="primary" @click=${() => bottles.openAdd(null)}>
@@ -563,7 +552,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       ]}
       value=${statusFilterOf(ctx.query.get('status'))}
       @change=${(event: Event) => {
-        const chosen = eventValue(event);
+        const chosen = eventField(event, 'value');
         const value = statusFilterOf(typeof chosen === 'string' ? chosen : null);
         setQuery({ status: value === 'all' ? null : value });
       }}
@@ -641,8 +630,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
   }
 
   function start(): void {
-    stop?.();
-    stop = watch(element, [tree, listFor()], draw);
+    watched?.stop();
+    watched = watch(element, [tree, listFor()], draw);
   }
 
   follow(element, ctx.query.subscribe, () => {
@@ -653,6 +642,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   });
   follow(element, ctx.person.subscribe, start);
   start();
+  onWidth(element, () => watched?.redraw());
   const arrivingBottle = idOf(ctx.query.get('bottle'));
   if (ctx.query.get('add') !== null) {
     bottles.openAdd(arrivingDraft());

@@ -1,4 +1,5 @@
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import { watch } from '../../../app/load.ts';
 import { resourceFor } from '../../../app/resources.ts';
 import { href } from '../../../app/router.ts';
 import { SETTINGS_PAGES, type SettingsPage, settingsPath } from '../../../app/routes.ts';
@@ -6,7 +7,7 @@ import { setAppBar } from '../../../app/shell.ts';
 import type { ScreenContext, SessionPerson } from '../../../app/types.ts';
 import { illustration } from '../../../design-system/illustration.ts';
 import { type TextKey, text } from '../../../text/index.ts';
-import { loadFailed, watch } from './watch.ts';
+import { loadFailed } from './load-failed.ts';
 import './frame.css';
 
 const GROUPS: readonly { readonly group: SettingsPage['group']; readonly label: TextKey }[] = [
@@ -46,8 +47,8 @@ function loginOffBanner(session: SessionPerson): TemplateResult | typeof nothing
 
 function ownerOnly(main: HTMLElement): void {
   const members = resourceFor('listMembers', {}, { tags: ['settings'] });
-  watch(main, [members], ({ state, retry }) => {
-    if (state === 'failed') {
+  watch(main, [members], ({ phase, retry }) => {
+    if (phase === 'failed') {
       render(loadFailed(text('nav.settings'), retry), main);
       return;
     }
@@ -61,7 +62,7 @@ function ownerOnly(main: HTMLElement): void {
         description=${text('ownerOnly.body', { owner: owner.name })}
       >
         ${illustration('empty-lost')}
-        <lc-button variant="primary" href="/more">${text('ownerOnly.back')}</lc-button>
+        <lc-button variant="primary" href=${href('/more')}>${text('ownerOnly.back')}</lc-button>
       </lc-empty-state>`,
       main,
     );

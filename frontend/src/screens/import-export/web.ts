@@ -1,10 +1,10 @@
 import type { RecipeDraft } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventField } from '../../app/events.ts';
+import { actionFailed } from '../../app/problems.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { text } from '../../text/index.ts';
-import { actionFailed } from '../menus/support.ts';
-import { detailField } from './files.ts';
 
 type Mode = 'url' | 'text';
 type Busy = 'url' | 'url-ai' | 'text' | 'text-ai';
@@ -151,7 +151,7 @@ export function webPanel(ctx: ScreenContext): HTMLElement {
         error-message=${urlError ?? nothing}
         ?disabled=${busy !== null}
         @input=${(event: Event) => {
-          const value = detailField(event, 'value');
+          const value = eventField(event, 'value');
           address = typeof value === 'string' ? value : '';
         }}
       ></lc-input>
@@ -192,7 +192,7 @@ export function webPanel(ctx: ScreenContext): HTMLElement {
       value=${pasted}
       ?disabled=${busy !== null}
       @input=${(event: Event) => {
-        const value = detailField(event, 'value');
+        const value = eventField(event, 'value');
         pasted = typeof value === 'string' ? value : '';
         draw();
       }}

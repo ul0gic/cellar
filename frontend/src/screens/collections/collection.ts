@@ -1,6 +1,9 @@
 import { type Collection, LIMITS, type RecipeSummary } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
@@ -11,11 +14,8 @@ import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
 import { openActions } from '../recipes/parts/actions.ts';
-import { eventText } from '../recipes/parts/events.ts';
-import { actionFailed } from '../recipes/parts/failures.ts';
 import { segmentsOf } from '../recipes/parts/segments.ts';
 import { openSheet } from '../recipes/parts/sheet.ts';
-import { errorOf, onLeave, reload, slowFlag, watch } from '../recipes/parts/view.ts';
 import './collections.css';
 
 export function screen(ctx: ScreenContext): HTMLElement {
@@ -37,7 +37,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return element;
   }
   const source = resourceFor('getCollection', { params: { id } }, { tags: ['collections', 'recipes', 'shelf'] });
-  const slow = slowFlag(() => draw());
+  let loadState: LoadState | null = null;
 
   const reorder = async (recipeIds: readonly number[]): Promise<void> => {
     try {
@@ -188,7 +188,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const draw = (): void => {
     const collection = source.peek();
-    const problem = errorOf(source);
+    const problem = loadState?.error(source) ?? null;
     if (collection === undefined) {
       if (problem?.code === 'not_found') {
         missing();
@@ -196,16 +196,15 @@ export function screen(ctx: ScreenContext): HTMLElement {
         render(
           html`<lc-empty-state title=${text('loadFailed.title', { screen: text('title.collection') })} description=${text('loadFailed.body')}>
             ${illustration('empty-lost')}
-            <lc-button variant="primary" @click=${() => reload(source)}>${text('loadFailed.retry')}</lc-button>
+            <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
           </lc-empty-state>`,
           element,
         );
-      } else if (slow.slow() && element.querySelector('.cl-skeleton') === null) {
+      } else if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
         element.replaceChildren(skeleton('rows', text('title.collection')));
       }
       return;
     }
-    slow.cancel();
     element.querySelector('.cl-skeleton')?.remove();
     setScreenTitle(collection.name);
     const canMake = collection.recipes.filter((recipe) => recipe.canMake).length;
@@ -244,10 +243,9 @@ export function screen(ctx: ScreenContext): HTMLElement {
     );
   };
 
-  const stop = watch(source, draw);
-  onLeave(element, () => {
-    slow.cancel();
-    stop();
+  watch(element, [source], (state) => {
+    loadState = state;
+    draw();
   });
   return element;
 }

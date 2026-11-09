@@ -2,6 +2,9 @@ import { formatAbv, formatVolume, type PreferredUnit, type Recipe, type RecipeLi
 import type { DropdownItem } from '@lightstart/light/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventChecked, eventNumber, eventText } from '../../app/events.ts';
+import { type LoadState, onLeave, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
 import type { ScreenContext, SessionPerson } from '../../app/types.ts';
@@ -17,14 +20,13 @@ import { text } from '../../text/index.ts';
 import { openActions } from './parts/actions.ts';
 import { openHistorySheet, openPhotoSheet } from './parts/ai-sheets.ts';
 import { openCollectionSheet } from './parts/collection-sheet.ts';
-import { eventChecked, eventNumber, eventText } from './parts/events.ts';
-import { actionFailed } from './parts/failures.ts';
 import { openMenuSheet } from './parts/menu-sheet.ts';
 import { openNoteSheet } from './parts/note-sheet.ts';
 import { ratingControl } from './parts/rating.ts';
 import { SERVINGS_MAX, servingsOf } from './parts/servings.ts';
 import { undoAdded } from './parts/shopping-undo.ts';
-import { errorOf, onLeave, reload, slowFlag, triggerOf, watch } from './parts/view.ts';
+import { methodSteps } from './parts/steps.ts';
+import { triggerOf } from './parts/view.ts';
 import './recipe.css';
 
 // D-1 §9.5: eight notes show before "Show all".
@@ -180,10 +182,7 @@ function variations(recipe: Recipe): TemplateResult {
 }
 
 function method(recipe: Recipe): TemplateResult {
-  const steps = recipe.instructions
-    .split(/\n+/)
-    .map((step) => step.trim())
-    .filter((step) => step !== '');
+  const steps = methodSteps(recipe.instructions);
   if (steps.length === 0) {
     return html``;
   }
@@ -201,7 +200,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     render(
       html`<lc-empty-state
         title=${text('recipes.notFoundTitle')}
-        description=${bookSize === null ? text('recipes.notFoundBody') : text('recipes.notFoundCount', { count: bookSize })}
+        description=${bookSize === null ? text('recipes.notFoundBody') : text(bookSize === 1 ? 'recipes.notFoundCountOne' : 'recipes.notFoundCount', { count: bookSize })}
       >
         ${illustration('empty-lost')}
         <lc-button variant="primary" href=${href('/recipes')}>${text('recipes.backToRecipes')}</lc-button>
@@ -250,7 +249,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const onVisible = (): void => void acquireWake();
 
-  const slow = slowFlag(() => draw());
+  let loadState: LoadState | null = null;
 
   const toggleFavorite = async (current: Recipe): Promise<void> => {
     try {
@@ -441,13 +440,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
                   ? html`<lc-button
                       variant="ghost"
                       @click=${() => {
-                        stopNotes();
+                        notesWatch.stop();
                         notes = resourceFor(
                           'listRecipeNotes',
                           { params: { id }, query: { pageSize: NOTES_ALL } },
                           { tags: ['notes'] },
                         );
-                        stopNotes = watch(notes, draw);
+                        notesWatch = watch(element, [notes], () => draw());
                       }}
                     >${text('recipes.showAllNotes', { count: page.total })}</lc-button>`
                   : nothing
@@ -608,7 +607,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
         description=${text('loadFailed.body')}
       >
         ${illustration('empty-lost')}
-        <lc-button variant="primary" @click=${() => reload(recipe)}>${text('loadFailed.retry')}</lc-button>
+        <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
       </lc-empty-state>`,
       element,
     );
@@ -617,7 +616,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   const draw = (): void => {
     const current = recipe.peek();
     const session = ctx.person.current();
-    const problem = errorOf(recipe);
+    const problem = loadState?.error(recipe) ?? null;
     if (problem !== null && current === undefined) {
       if (problem.code === 'not_found') {
         notFound(others);
@@ -636,12 +635,11 @@ export function screen(ctx: ScreenContext): HTMLElement {
       return;
     }
     if (current === undefined || session === null) {
-      if (slow.slow() && element.querySelector('.cl-skeleton') === null) {
+      if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
         element.replaceChildren(skeleton('figure', text('title.recipe')), skeleton('lines', text('title.recipe')));
       }
       return;
     }
-    slow.cancel();
     setScreenTitle(current.name);
     const servings = servingsOf(ctx.query.get('servings'));
     const unit = unitOf(ctx.query.get('unit'), session);
@@ -674,18 +672,17 @@ export function screen(ctx: ScreenContext): HTMLElement {
     );
   };
 
-  const stopRecipe = watch(recipe, draw);
-  let stopNotes = watch(notes, draw);
-  const stopShopping = watch(shopping, () => undefined);
+  watch(element, [recipe], (state) => {
+    loadState = state;
+    draw();
+  });
+  let notesWatch = watch(element, [notes], () => draw());
+  watch(element, [shopping], () => undefined);
   const stopQuery = ctx.query.subscribe(draw);
   const stopPerson = ctx.person.subscribe(draw);
   document.addEventListener('visibilitychange', onVisible);
   void acquireWake();
   onLeave(element, () => {
-    slow.cancel();
-    stopRecipe();
-    stopNotes();
-    stopShopping();
     stopQuery();
     stopPerson();
     document.removeEventListener('visibilitychange', onVisible);

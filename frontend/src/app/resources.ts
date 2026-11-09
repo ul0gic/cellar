@@ -1,5 +1,5 @@
 import type { OperationId } from '@cellar/contract';
-import type { Resource } from '@lightstart/light/controller';
+import type { Resource, ResourceHandle } from '@lightstart/light/controller';
 import { resource } from '@lightstart/light/controller/resource';
 import { type ApiInput, type ApiOutput, call } from './api.ts';
 
@@ -24,6 +24,14 @@ interface Entry {
 }
 
 const entries = new Map<string, Entry>();
+const watchers = new WeakMap<ResourceHandle, number>();
+
+export function hold(handle: ResourceHandle): () => void {
+  watchers.set(handle, (watchers.get(handle) ?? 0) + 1);
+  return () => {
+    watchers.set(handle, (watchers.get(handle) ?? 0) - 1);
+  };
+}
 
 export function resourceFor<Op extends OperationId>(
   op: Op,
@@ -40,7 +48,7 @@ export function resourceFor<Op extends OperationId>(
   entries.set(key, {
     tags: new Set(opts.tags ?? []),
     resource: created,
-    live: () => created.value._subscribers.size > 0,
+    live: () => (watchers.get(created) ?? 0) > 0,
     refresh: () => created.invalidate(),
     dispose: () => created.dispose(),
   });

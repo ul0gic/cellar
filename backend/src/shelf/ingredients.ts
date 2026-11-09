@@ -72,10 +72,21 @@ function recipeCounts(ctx: AppContext): Map<Id, number> {
   );
 }
 
+function houseMadeIds(ctx: AppContext): Set<Id> {
+  return new Set(
+    ctx.db
+      .prepare('SELECT DISTINCT ingredient_id AS id FROM ingredient_parts')
+      .all()
+      .map((row) => num(row, 'id')),
+  );
+}
+
 export function getIngredientTree(ctx: AppContext): IngredientTree {
   const taxonomy = loadTaxonomy(ctx);
   const onHand = onHandIngredientIds(ctx.db);
   const bottles = shelfBottleCounts(ctx);
+  const recipes = recipeCounts(ctx);
+  const houseMade = houseMadeIds(ctx);
   const nodes: IngredientNode[] = [];
   const visit = (parentId: Id | null, depth: number): void => {
     for (const node of taxonomy.children.get(parentId) ?? []) {
@@ -87,6 +98,8 @@ export function getIngredientTree(ctx: AppContext): IngredientTree {
         onHand: onHand.has(node.id),
         childCount: taxonomy.children.get(node.id)?.length ?? 0,
         bottleCount: bottles.get(node.id) ?? 0,
+        recipeCount: recipes.get(node.id) ?? 0,
+        houseMade: houseMade.has(node.id),
       });
       visit(node.id, depth + 1);
     }
@@ -95,11 +108,28 @@ export function getIngredientTree(ctx: AppContext): IngredientTree {
   return { nodes };
 }
 
+function nameTier(foldedName: string, needle: string): number {
+  if (foldedName === needle) {
+    return 0;
+  }
+  if (foldedName.startsWith(`${needle} `)) {
+    return 1;
+  }
+  if (` ${foldedName} `.includes(` ${needle} `)) {
+    return 2;
+  }
+  if (foldedName.startsWith(needle)) {
+    return 3;
+  }
+  return ` ${foldedName}`.includes(` ${needle}`) ? 4 : 5;
+}
+
 export function listIngredients(ctx: AppContext, query: IngredientListQuery): IngredientSummaryPage {
   const taxonomy = loadTaxonomy(ctx);
   const onHand = onHandIngredientIds(ctx.db);
   const bottles = shelfBottleCounts(ctx);
   const recipes = recipeCounts(ctx);
+  const houseMade = houseMadeIds(ctx);
   const underRoot = query.root === undefined ? null : descendantsAndSelf(taxonomy, query.root);
   const needle = query.q === undefined ? null : foldName(query.q);
   const matches = [...taxonomy.nodes.values()].filter(
@@ -108,11 +138,19 @@ export function listIngredients(ctx: AppContext, query: IngredientListQuery): In
       (query.onHand === undefined || onHand.has(node.id) === query.onHand) &&
       (underRoot === null || underRoot.has(node.id)) &&
       (query.parent === undefined || node.parentId === query.parent) &&
-      (query.hasBottles === undefined || (bottles.get(node.id) ?? 0) > 0 === query.hasBottles),
+      (query.hasBottles === undefined || (bottles.get(node.id) ?? 0) > 0 === query.hasBottles) &&
+      (query.houseMade !== true || houseMade.has(node.id)),
   );
   const sort = query.sort ?? 'name';
   const direction = (query.order ?? (sort === 'name' ? 'asc' : 'desc')) === 'asc' ? 1 : -1;
+  const byRelevance = needle !== null && query.sort === undefined;
   matches.sort((a, b) => {
+    if (byRelevance) {
+      const byTier = nameTier(a.foldedName, needle) - nameTier(b.foldedName, needle);
+      if (byTier !== 0) {
+        return byTier;
+      }
+    }
     if (sort === 'recipes') {
       const byCount = (recipes.get(a.id) ?? 0) - (recipes.get(b.id) ?? 0);
       if (byCount !== 0) {
@@ -155,6 +193,7 @@ export function listIngredients(ctx: AppContext, query: IngredientListQuery): In
         markedOnHand: num(row, 'on_hand') === 1,
         bottleCount: bottles.get(node.id) ?? 0,
         recipeCount: recipes.get(node.id) ?? 0,
+        houseMade: houseMade.has(node.id),
       },
     ];
   });

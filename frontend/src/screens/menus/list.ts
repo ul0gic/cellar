@@ -2,27 +2,25 @@ import { LIMITS, type MenuSummary } from '@cellar/contract';
 import type { LightElements } from '@lightstart/light/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { type LoadState, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
+import { today } from '../../app/today.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { illustration } from '../../design-system/illustration.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
-import { text } from '../../text/index.ts';
 import { formatDate } from '../../text/format.ts';
-import { actionFailed, type LoadState, todayIso, watchResource } from './support.ts';
+import { text } from '../../text/index.ts';
 import './list.css';
 
 type Dropdown = LightElements['lc-dropdown'];
 
 function drinks(count: number): string {
   return count === 1 ? text('menus.drink') : text('menus.drinks', { count });
-}
-
-function isPast(menu: MenuSummary): boolean {
-  return menu.date < todayIso();
 }
 
 function copyName(name: string): string {
@@ -37,7 +35,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const create = async (): Promise<void> => {
     try {
-      const menu = await call('createMenu', { body: { name: text('menus.newName'), date: todayIso(), sections: [] } });
+      const menu = await call('createMenu', { body: { name: text('menus.newName'), date: today(), sections: [] } });
       invalidate('menus');
       ctx.navigate(`/menus/${menu.id}`);
     } catch (error) {
@@ -49,7 +47,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     try {
       const copied = await call('copyMenu', {
         params: { id: menu.id },
-        body: { name: copyName(menu.name), date: todayIso() },
+        body: { name: copyName(menu.name), date: today() },
       });
       invalidate('menus');
       toast({ title: text('menus.copied', { name: menu.name }) });
@@ -87,8 +85,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
   };
 
   const row = (menu: MenuSummary): TemplateResult => {
-    const past = isPast(menu);
-    const line = text(past ? 'menus.rowEnded' : 'menus.rowDraft', {
+    const ended = menu.endedAt !== null;
+    const line = text(ended ? 'menus.rowEnded' : 'menus.rowDraft', {
       date: formatDate(menu.date),
       drinks: drinks(menu.itemCount),
     });
@@ -103,9 +101,9 @@ export function screen(ctx: ScreenContext): HTMLElement {
         <span class="cl-menus-row-line">${line}</span>
       </a>
       ${
-        past
+        ended
           ? html`<lc-button ghost @click=${() => void copy(menu)}>${text('menus.copy')}</lc-button>`
-          : html`<lc-button ghost href=${`/menus/${menu.id}`}>${text('menus.edit')}</lc-button>`
+          : html`<lc-button ghost href=${href(`/menus/${menu.id}`)}>${text('menus.edit')}</lc-button>`
       }
       <lc-button ghost icon-only aria-haspopup="menu" aria-label=${text('menus.more', { name: menu.name })} @click=${openMore}>
         <lc-icon name="ellipsis" aria-hidden="true"></lc-icon>
@@ -114,14 +112,14 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </li>`;
   };
 
-  const body = (state: LoadState, page: { items: readonly MenuSummary[] } | undefined): TemplateResult => {
-    if (state === 'failed') {
+  const body = (load: LoadState, page: { items: readonly MenuSummary[] } | undefined): TemplateResult => {
+    if (load.phase === 'failed') {
       return html`<lc-empty-state
         title=${text('loadFailed.title', { screen: text('menus.title') })}
         description=${text('loadFailed.body')}
       >
         ${illustration('empty-lost')}
-        <lc-button variant="primary" @click=${() => retry()}>${text('loadFailed.retry')}</lc-button>
+        <lc-button variant="primary" @click=${() => load.retry()}>${text('loadFailed.retry')}</lc-button>
       </lc-empty-state>`;
     }
     if (page === undefined) {
@@ -148,26 +146,26 @@ export function screen(ctx: ScreenContext): HTMLElement {
     `;
   };
 
-  const draw = (state: LoadState, page: { items: readonly MenuSummary[] } | undefined): void => {
-    const empty = state !== 'failed' && page !== undefined && page.items.length === 0;
+  const draw = (load: LoadState, page: { items: readonly MenuSummary[] } | undefined): void => {
+    const empty = load.phase !== 'failed' && page !== undefined && page.items.length === 0;
     render(
       html`
         <header class="cl-menus-head">
           <h1 class="cl-menus-title">${text('menus.title')}</h1>
           ${
-            empty || state === 'failed'
+            empty || load.phase === 'failed'
               ? nothing
               : html`<lc-button variant="primary" @click=${() => void create()}>
                 <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('menus.new')}
               </lc-button>`
           }
         </header>
-        ${state === 'slow' && page === undefined ? skeleton('rows', text('menus.title')) : body(state, page)}
+        ${load.phase === 'slow' && page === undefined ? skeleton('rows', text('menus.title')) : body(load, page)}
       `,
       element,
     );
   };
 
-  const retry = watchResource(element, menus, (state, page) => draw(state, page));
+  watch(element, [menus], (load) => draw(load, menus.peek()));
   return element;
 }

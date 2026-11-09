@@ -11,6 +11,9 @@ import {
 import type { FormField } from '@lightstart/light/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { onLeave } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate } from '../../app/resources.ts';
 import { href, router } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
@@ -23,11 +26,8 @@ import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
 import { openActions } from './parts/actions.ts';
 import { openPhotoSheet } from './parts/ai-sheets.ts';
-import { eventText } from './parts/events.ts';
-import { actionFailed } from './parts/failures.ts';
 import { BLANK_LINE, type LineDraft, registerLineFields, toUnit } from './parts/line-fields.ts';
 import { openSheet } from './parts/sheet.ts';
-import { onLeave } from './parts/view.ts';
 import './form.css';
 
 interface Taxonomy {

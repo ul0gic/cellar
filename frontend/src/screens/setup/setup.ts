@@ -1,15 +1,15 @@
 import { type Job, LIMITS } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { problemText } from '../../app/problems.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { armFirstArrival } from '../../design-system/motion.ts';
 import { text } from '../../text/index.ts';
 import { screen as notFound } from '../launch/not-found.ts';
 import { cardForm, stepDots } from '../login/parts/stage.ts';
-import { eventValue } from '../settings/parts/events.ts';
 import { switchField } from '../settings/parts/fields.ts';
 import { followJob, jobProgress } from '../settings/parts/job.ts';
-import { problemText } from '../settings/parts/problems.ts';
 
 type Step = 'checking' | 'account' | 'options' | 'loading' | 'failed' | 'done';
 
@@ -55,7 +55,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           .value=${name}
           error-message=${nameError}
           @input=${(event: Event) => {
-            name = eventValue(event);
+            name = eventText(event);
           }}
         ></lc-input>
         <div class="cl-field">
@@ -68,7 +68,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
             error-message=${passwordError}
             hint=${text('setup.passwordHint')}
             @input=${(event: Event) => {
-              password = eventValue(event);
+              password = eventText(event);
             }}
           ></lc-input>
         </div>

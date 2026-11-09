@@ -6,7 +6,7 @@ import { prefersReducedMotion } from '../design-system/motion.ts';
 import { type TextKey, text } from '../text/index.ts';
 import { type AuthCode, ApiError, call, onAuthProblem, onReachabilityChange } from './api.ts';
 import { person } from './person.ts';
-import { resourceFor } from './resources.ts';
+import { hold, resourceFor } from './resources.ts';
 import { FALLBACK_PATH, href, navigate, query, router } from './router.ts';
 import { routes } from './routes.ts';
 import { loadScreen } from './screens.ts';
@@ -310,6 +310,8 @@ function watchCounts(): void {
     menuLive = page?.items.some((menu) => menu.live) ?? false;
     draw();
   });
+  hold(shopping);
+  hold(menus);
   void shopping.ensure();
   void menus.ensure();
 }

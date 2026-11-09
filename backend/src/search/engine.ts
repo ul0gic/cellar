@@ -35,8 +35,23 @@ const WORD = /[\p{L}\p{N}]+/gu;
 const FUZZY_BELOW_HITS = 3;
 const NAME_WEIGHT = 10;
 
-function matchExpression(words: readonly string[]): string {
-  return words.map((word) => `"${word}"*`).join(' ');
+interface Terms {
+  readonly match: string;
+  readonly exact: string;
+  readonly phrase: string;
+}
+
+function termsOf(query: string, words: readonly string[]): Terms {
+  return { match: words.map((word) => `"${word}"*`).join(' '), exact: foldName(query), phrase: words.join(' ') };
+}
+
+function nameTier(column: string): string {
+  return `CASE
+    WHEN ${column} IN (:exact, :phrase) THEN 0
+    WHEN substr(${column}, 1, length(:phrase) + 1) = :phrase || ' ' THEN 1
+    WHEN instr(' ' || ${column} || ' ', ' ' || :phrase || ' ') > 0 THEN 2
+    WHEN substr(${column}, 1, length(:phrase)) = :phrase THEN 3
+    ELSE 4 END`;
 }
 
 function count(db: Database, table: string, match: string): number {
@@ -58,56 +73,56 @@ function parentRef(row: Row): TaxonRef | null {
   return id === null || name === null ? null : { id, name };
 }
 
-function recipeGroup(db: Database, match: string, limit: number): SearchGroup<RecipeMatch> {
+function recipeGroup(db: Database, terms: Terms, limit: number): SearchGroup<RecipeMatch> {
   const rows = db
     .prepare(
       `SELECT r.id, r.name, ${IMAGE_COLUMNS}
        FROM recipes_fts f
        JOIN recipes r ON r.id = f.rowid
        LEFT JOIN images i ON i.id = (SELECT image_id FROM recipe_images WHERE recipe_id = r.id ORDER BY position LIMIT 1)
-       WHERE recipes_fts MATCH ?
-       ORDER BY bm25(recipes_fts, 0, ${NAME_WEIGHT}, 1, 1), r.id
-       LIMIT ?`,
+       WHERE recipes_fts MATCH :match
+       ORDER BY ${nameTier('r.folded_name')}, bm25(recipes_fts, 0, ${NAME_WEIGHT}, 1, 1), r.id
+       LIMIT :limit`,
     )
-    .all(match, limit);
+    .all({ ...terms, limit });
   return {
-    total: count(db, 'recipes_fts', match),
+    total: count(db, 'recipes_fts', terms.match),
     items: rows.map((row) => ({ id: num(row, 'id'), name: str(row, 'name'), image: imageRowOrNull(row) })),
   };
 }
 
-function ingredientGroup(db: Database, match: string, limit: number): SearchGroup<IngredientMatch> {
+function ingredientGroup(db: Database, terms: Terms, limit: number): SearchGroup<IngredientMatch> {
   const rows = db
     .prepare(
       `SELECT i.id, i.name, p.id AS parent_id, p.name AS parent_name
        FROM ingredients_fts f
        JOIN ingredients i ON i.id = f.rowid
        LEFT JOIN ingredients p ON p.id = i.parent_id
-       WHERE ingredients_fts MATCH ?
-       ORDER BY bm25(ingredients_fts, 0, ${NAME_WEIGHT}, 1), i.id
-       LIMIT ?`,
+       WHERE ingredients_fts MATCH :match
+       ORDER BY ${nameTier('i.folded_name')}, bm25(ingredients_fts, 0, ${NAME_WEIGHT}, 1), i.id
+       LIMIT :limit`,
     )
-    .all(match, limit);
+    .all({ ...terms, limit });
   return {
-    total: count(db, 'ingredients_fts', match),
+    total: count(db, 'ingredients_fts', terms.match),
     items: rows.map((row) => ({ id: num(row, 'id'), name: str(row, 'name'), parent: parentRef(row) })),
   };
 }
 
-function bottleGroup(db: Database, match: string, limit: number): SearchGroup<BottleHit> {
+function bottleGroup(db: Database, terms: Terms, limit: number): SearchGroup<BottleHit> {
   const rows = db
     .prepare(
       `SELECT b.id, b.name, b.status, i.id AS ingredient_id, i.name AS ingredient_name
        FROM bottles_fts f
        JOIN bottles b ON b.id = f.rowid
        JOIN ingredients i ON i.id = b.ingredient_id
-       WHERE bottles_fts MATCH ?
-       ORDER BY bm25(bottles_fts, 0, ${NAME_WEIGHT}), b.id
-       LIMIT ?`,
+       WHERE bottles_fts MATCH :match
+       ORDER BY ${nameTier('fold_name(b.name)')}, bm25(bottles_fts, 0, ${NAME_WEIGHT}), b.id
+       LIMIT :limit`,
     )
-    .all(match, limit);
+    .all({ ...terms, limit });
   return {
-    total: count(db, 'bottles_fts', match),
+    total: count(db, 'bottles_fts', terms.match),
     items: rows.map((row) => ({
       id: num(row, 'id'),
       name: str(row, 'name'),
@@ -164,14 +179,13 @@ function totalOf(result: SearchMatches): number {
   return result.recipes.total + result.ingredients.total + result.bottles.total;
 }
 
-function runAll(db: Database, query: string, words: readonly string[], perGroup: number): SearchMatches {
-  const match = matchExpression(words);
+function runAll(db: Database, query: string, terms: Terms, perGroup: number): SearchMatches {
   return {
     query,
     correctedQuery: null,
-    recipes: recipeGroup(db, match, perGroup),
-    ingredients: ingredientGroup(db, match, perGroup),
-    bottles: bottleGroup(db, match, perGroup),
+    recipes: recipeGroup(db, terms, perGroup),
+    ingredients: ingredientGroup(db, terms, perGroup),
+    bottles: bottleGroup(db, terms, perGroup),
   };
 }
 
@@ -181,7 +195,7 @@ export function searchAll(db: Database, q: string, perGroup: number): SearchMatc
     const empty = { total: 0, items: [] };
     return { query: q, correctedQuery: null, recipes: empty, ingredients: empty, bottles: empty };
   }
-  const first = runAll(db, q, words, perGroup);
+  const first = runAll(db, q, termsOf(q, words), perGroup);
   if (totalOf(first) >= FUZZY_BELOW_HITS) {
     return first;
   }
@@ -189,16 +203,18 @@ export function searchAll(db: Database, q: string, perGroup: number): SearchMatc
   if (correction === null) {
     return first;
   }
-  const second = runAll(db, q, correction.words, perGroup);
+  const second = runAll(db, q, termsOf(correction.query, correction.words), perGroup);
   return totalOf(second) > totalOf(first) ? { ...second, correctedQuery: correction.query } : first;
 }
 
-function recipeIds(db: Database, words: readonly string[]): Id[] {
+function recipeIds(db: Database, terms: Terms): Id[] {
   return db
     .prepare(
-      `SELECT rowid AS id FROM recipes_fts WHERE recipes_fts MATCH ? ORDER BY bm25(recipes_fts, 0, ${NAME_WEIGHT}, 1, 1), rowid`,
+      `SELECT r.id FROM recipes_fts f JOIN recipes r ON r.id = f.rowid
+       WHERE recipes_fts MATCH :match
+       ORDER BY ${nameTier('r.folded_name')}, bm25(recipes_fts, 0, ${NAME_WEIGHT}, 1, 1), r.id`,
     )
-    .all(matchExpression(words))
+    .all({ ...terms })
     .map((row) => num(row, 'id'));
 }
 
@@ -207,7 +223,7 @@ export function searchRecipeIds(db: Database, q: string): Id[] {
   if (words.length === 0) {
     return [];
   }
-  const first = recipeIds(db, words);
+  const first = recipeIds(db, termsOf(q, words));
   if (first.length >= FUZZY_BELOW_HITS) {
     return first;
   }
@@ -215,6 +231,6 @@ export function searchRecipeIds(db: Database, q: string): Id[] {
   if (correction === null) {
     return first;
   }
-  const second = recipeIds(db, correction.words);
+  const second = recipeIds(db, termsOf(correction.query, correction.words));
   return second.length > first.length ? second : first;
 }

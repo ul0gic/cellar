@@ -1,5 +1,6 @@
 // biome-ignore lint/correctness/noUnresolvedImports: Biome 2.6.6's Node built-in module list lacks node:sqlite
 import { DatabaseSync } from 'node:sqlite';
+import { foldName } from '@cellar/contract';
 import { StartupExit } from './problems.ts';
 
 export type Database = DatabaseSync;
@@ -46,6 +47,12 @@ export function openDatabase(path: string): Database {
       `${path} isn't a SQLite database or is damaged. Restore a backup (cellar restore) or move the file away to start fresh.`,
     );
   }
+  db.function('fold_name', { deterministic: true }, (name) => {
+    if (typeof name !== 'string') {
+      throw new TypeError('fold_name takes text');
+    }
+    return foldName(name);
+  });
   return db;
 }
 

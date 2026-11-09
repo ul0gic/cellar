@@ -33,7 +33,7 @@ export interface RecipeImportRequest {
   readonly file: UploadedFile;
   readonly mode: ImportMode;
   readonly duplicate: DuplicateRule;
-  readonly unmatchedParentId: Id;
+  readonly unmatchedParentId: Id | null;
   readonly fetchRemoteImages: boolean;
   readonly memberId: Id;
 }
@@ -385,7 +385,10 @@ function failure(rows: RecipeImportRow[], mode: ImportMode): ProblemError {
 
 export async function importRecipes(ctx: AppContext, request: RecipeImportRequest): Promise<RecipeImportReport> {
   const file = await readExport(request.file);
-  if (ctx.db.prepare('SELECT 1 FROM ingredients WHERE id = ?').get(request.unmatchedParentId) === undefined) {
+  if (
+    request.unmatchedParentId !== null &&
+    ctx.db.prepare('SELECT 1 FROM ingredients WHERE id = ?').get(request.unmatchedParentId) === undefined
+  ) {
     throw problem('validation_failed', {
       fields: [{ path: 'unmatchedParentId', code: 'not_found', message: "This doesn't exist any more." }],
     });

@@ -11,10 +11,10 @@ import { registerFormFieldRenderer } from '@lightstart/light/components/form/fie
 import type { SearchDoc } from '@lightstart/light/components/types.js';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
+import { eventChecked, eventText } from '../../../app/events.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
 import { text } from '../../../text/index.ts';
-import { eventChecked, eventText } from './events.ts';
-import { actionFailed } from './failures.ts';
 import { openSheet } from './sheet.ts';
 
 export interface PickedIngredient {

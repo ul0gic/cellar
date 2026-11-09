@@ -1,16 +1,16 @@
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
+import { eventText } from '../../../app/events.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { text } from '../../../text/index.ts';
-import { eventText } from './events.ts';
-import { actionFailed } from './failures.ts';
 import {
   apiQuery,
   type ListFilters,
   type ListState,
   NO_FILTERS,
   RATING_CHOICES,
-  SORTS,
   type Sort,
+  sortsFor,
   type Status,
 } from './list-query.ts';
 import { openSheet } from './sheet.ts';
@@ -26,6 +26,7 @@ export interface FilterSheetResult {
 }
 
 export const SORT_KEYS: Readonly<Record<Sort, `recipes.${string}`>> = {
+  relevance: 'recipes.sortRelevance',
   rating: 'recipes.sortRating',
   name: 'recipes.sortName',
   abv: 'recipes.sortAbv',
@@ -102,9 +103,9 @@ export async function openFilterSheet(state: ListState, apply: (result: FilterSh
       <lc-select
         label=${text('recipes.sortBy')}
         value=${sort}
-        .options=${SORTS.map((value) => ({ value, label: text(SORT_KEYS[value]) }))}
+        .options=${sortsFor(state.q).map((value) => ({ value, label: text(SORT_KEYS[value]) }))}
         @change=${(event: Event) => {
-          sort = SORTS.find((value) => value === eventText(event)) ?? sort;
+          sort = sortsFor(state.q).find((value) => value === eventText(event)) ?? sort;
           sheet.redraw();
         }}
       ></lc-select>
@@ -181,7 +182,7 @@ export async function openFilterSheet(state: ListState, apply: (result: FilterSh
           sheet.close();
           apply({ filters, sort });
         }}
-      >${count === null ? text('recipes.showResults') : text('recipes.showCount', { count })}</lc-button>
+      >${count === null ? text('recipes.showResults') : text(count === 1 ? 'recipes.showCountOne' : 'recipes.showCount', { count })}</lc-button>
     `,
   });
   recount().catch((error: unknown) => actionFailed(error, () => void recount()));

@@ -1,15 +1,15 @@
 import { buildPath, type Job, RESTORE_CONFIRMATION, type RestoreUpload } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventFile } from '../../app/events.ts';
+import { actionFailed, problemText } from '../../app/problems.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { confirmTyped } from '../../design-system/dialogs.ts';
-import { formatDate, formatNumber } from '../../text/format.ts';
+import { formatCount, formatDate } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { eventFile } from './parts/events.ts';
 import { settingsPage } from './parts/frame.ts';
 import { followJob } from './parts/job.ts';
-import { actionFailed, problemText } from './parts/problems.ts';
 
 type Phase =
   | { readonly kind: 'idle' }
@@ -30,10 +30,10 @@ function summary(file: string, upload: RestoreUpload): string {
   return text('settings.backup.confirmBody', {
     file,
     date: formatDate(upload.manifest.createdAt),
-    members: formatNumber(counts.members),
-    recipes: formatNumber(counts.recipes),
-    bottles: formatNumber(counts.bottles),
-    notes: formatNumber(counts.notes),
+    members: formatCount(counts.members, text('settings.count.memberOne'), text('settings.count.memberMany')),
+    recipes: formatCount(counts.recipes, text('settings.count.recipeOne'), text('settings.count.recipeMany')),
+    bottles: formatCount(counts.bottles, text('settings.count.bottleOne'), text('settings.count.bottleMany')),
+    notes: formatCount(counts.notes, text('settings.count.noteOne'), text('settings.count.noteMany')),
   });
 }
 
@@ -74,6 +74,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
         const form = new FormData();
         form.append('file', file, file.name);
         const upload = await call('uploadRestore', { body: form });
+        phase = { kind: 'idle' };
+        draw();
         const sure = await confirmTyped({
           title: text('settings.backup.confirmTitle'),
           message: summary(file.name, upload),
@@ -81,8 +83,6 @@ export function screen(ctx: ScreenContext): HTMLElement {
           confirmLabel: text('settings.backup.confirm'),
         });
         if (!sure) {
-          phase = { kind: 'idle' };
-          draw();
           return;
         }
         await restore(file.name, upload);

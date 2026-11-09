@@ -1,13 +1,15 @@
 import type { BottleSummary, IsoDate } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventPage } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { illustration } from '../../design-system/illustration.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatDate, formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { attempt, eventPage, follow, type LoadState, money, waiting, watch } from '../shelf/parts/kit.ts';
+import { attempt, follow, money, waiting } from '../shelf/parts/kit.ts';
 import './history.css';
 
 // D-1 §8.30: list rows page at 100.
@@ -175,7 +177,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const start = (): void => {
     stop?.();
-    stop = watch(element, [stats, listFor()], draw);
+    stop = watch(element, [stats, listFor()], draw).stop;
   };
   follow(element, ctx.query.subscribe, start);
   follow(element, ctx.person.subscribe, start);

@@ -1,10 +1,11 @@
 import { type CsvImportReport, type CsvKind, type DuplicateRule, LIMITS } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { droppedFile, eventField } from '../../app/events.ts';
 import { invalidate } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { text } from '../../text/index.ts';
-import { detailField, download, droppedFile } from './files.ts';
+import { download } from './files.ts';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -261,7 +262,7 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
           value=${duplicate}
           ?disabled=${busy !== null}
           @change=${(event: Event) => {
-            const rule = duplicateRule(detailField(event, 'value'));
+            const rule = duplicateRule(eventField(event, 'value'));
             if (rule !== null && rule !== duplicate && file !== null) {
               duplicate = rule;
               void check(file);
@@ -347,8 +348,8 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
   };
 
   const onStepChange = (event: Event): void => {
-    const next = detailField(event, 'step');
-    const previous = detailField(event, 'previousStep');
+    const next = eventField(event, 'step');
+    const previous = eventField(event, 'previousStep');
     if (previous === 4) {
       restart();
       return;

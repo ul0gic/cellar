@@ -1,12 +1,13 @@
 import { type About, buildPath } from '@cellar/contract';
 import { html, render, type TemplateResult } from '@lightstart/light/html';
+import { watch } from '../../app/load.ts';
 import { resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
 import { settingsPage } from './parts/frame.ts';
-import { loadFailed, watch } from './parts/watch.ts';
+import { loadFailed } from './parts/load-failed.ts';
 
 export function screen(ctx: ScreenContext): HTMLElement {
   return settingsPage(ctx, 'about', (main) => {
@@ -43,13 +44,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </div>
     </section>`;
 
-    watch(main, [about], ({ state, retry }) => {
+    watch(main, [about], ({ phase, retry }) => {
       const current = about.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.about'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('lines', text('settings.about')), main);
-      } else if (state === 'ready' && current !== undefined) {
+      } else if (phase === 'ready' && current !== undefined) {
         render(view(current), main);
       }
     });

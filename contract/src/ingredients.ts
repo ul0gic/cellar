@@ -40,6 +40,8 @@ export const IngredientNodeSchema = z
     onHand: z.boolean(),
     childCount: z.int().min(0),
     bottleCount: z.int().min(0),
+    recipeCount: z.int().min(0),
+    houseMade: z.boolean(),
   })
   .meta({ id: 'IngredientNode' });
 export type IngredientNode = z.infer<typeof IngredientNodeSchema>;
@@ -59,6 +61,7 @@ export const IngredientSummarySchema = z
     markedOnHand: z.boolean(),
     bottleCount: z.int().min(0),
     recipeCount: z.int().min(0),
+    houseMade: z.boolean(),
   })
   .meta({ id: 'IngredientSummary' });
 export type IngredientSummary = z.infer<typeof IngredientSummarySchema>;
@@ -127,6 +130,7 @@ export const IngredientListQuerySchema = z.object({
   root: queryId.optional(),
   parent: queryId.optional(),
   hasBottles: queryBoolean.optional(),
+  houseMade: queryBoolean.optional(),
   sort: z.enum(['name', 'recipes']).optional(),
   order: SortOrderSchema.optional(),
   ...pageQueryShape,

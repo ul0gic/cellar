@@ -1,12 +1,13 @@
 import type { About } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import { watch } from '../../app/load.ts';
 import { resourceFor } from '../../app/resources.ts';
 import { setAppBar } from '../../app/shell.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
 import { settingsPage } from './parts/frame.ts';
-import { loadFailed, watch } from './parts/watch.ts';
+import { loadFailed } from './parts/load-failed.ts';
 
 const fontLicenses = import.meta.glob<string>('../../design-system/assets/fonts/OFL-*.txt', {
   query: '?raw',
@@ -41,13 +42,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       text: fontLicenses[font.file] ?? null,
     }));
 
-    watch(main, [about], ({ state, retry }) => {
+    watch(main, [about], ({ phase, retry }) => {
       const current = about.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.licenses'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('rows', text('settings.licenses')), main);
-      } else if (state === 'ready' && current !== undefined) {
+      } else if (phase === 'ready' && current !== undefined) {
         render(
           html`<section class="cl-sgroup" aria-labelledby="settings-licenses">
             <h2 id="settings-licenses">${text('settings.licenses')}</h2>

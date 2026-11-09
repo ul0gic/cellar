@@ -1,4 +1,4 @@
-import type { ImageRef, SearchResult } from '@cellar/contract';
+import { foldName, type ImageRef, type SearchResult } from '@cellar/contract';
 import type { SearchDoc } from '@lightstart/light/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
@@ -7,9 +7,10 @@ import { formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
 import './search.css';
 
-// AC-38 allows 150 ms from keystroke to paint; a 25 ms settle coalesces key repeats and leaves the rest to the server and paint.
+// Keystroke to paint is budgeted at 150 ms; a 25 ms settle coalesces key repeats and leaves the rest to the server and paint.
 const SETTLE_MS = 25;
 const QUERY_MAX = 100;
+const RESULT_LIMIT = 64;
 const INPUT_MARK = 'cellar:search-input';
 const PAINT_MARK = 'cellar:search-painted';
 
@@ -106,7 +107,10 @@ export function screen(): HTMLElement {
         image: hit.image,
         href: `/recipes/${hit.id}`,
       })),
-      { title: text('search.showAllRecipes', { count: formatNumber(result.recipes.total) }), href: `/recipes?q=${q}` },
+      {
+        title: text('search.showAllRecipes', { count: formatNumber(result.recipes.total) }),
+        href: `/recipes?status=all&q=${q}`,
+      },
     );
     groupDocs(
       docs,
@@ -208,7 +212,7 @@ export function screen(): HTMLElement {
             autofocus
             class="cl-search-field"
             placeholder=${text('search.placeholder')}
-            limit="64"
+            limit=${RESULT_LIMIT}
             .query=${query}
             .docs=${shown.docs}
             .groups=${shown.groups}
@@ -229,6 +233,11 @@ export function screen(): HTMLElement {
     );
     if (!answered) {
       return;
+    }
+    const search = element.querySelector('lc-search');
+    if (search !== null && phase.kind === 'ready') {
+      const exact = foldName(phase.result.correctedQuery ?? phase.result.query);
+      search.active = shown.docs.slice(0, RESULT_LIMIT).findIndex((doc) => foldName(doc.title) === exact);
     }
     requestAnimationFrame(() => {
       performance.mark(PAINT_MARK);

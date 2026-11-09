@@ -1,11 +1,11 @@
 import { LIMITS } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { fieldError, problemText } from '../../app/problems.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { armFirstArrival } from '../../design-system/motion.ts';
 import { text } from '../../text/index.ts';
-import { eventValue } from '../settings/parts/events.ts';
-import { fieldError, problemText } from '../settings/parts/problems.ts';
 import { nextPath, takeOneTimePassword } from './parts/handoff.ts';
 import { cardForm } from './parts/stage.ts';
 
@@ -38,7 +38,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     .value=${value}
     error-message=${error}
     hint=${hint}
-    @input=${(event: Event) => change(eventValue(event))}
+    @input=${(event: Event) => change(eventText(event))}
   ></lc-input>`;
 
   const refused = (error: ApiError): void => {

@@ -1,11 +1,11 @@
 import type { ProfileCard } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { actionFailed } from '../../app/problems.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { armFirstArrival } from '../../design-system/motion.ts';
 import { text } from '../../text/index.ts';
-import { actionFailed } from '../settings/parts/problems.ts';
-import { loadFailed } from '../settings/parts/watch.ts';
+import { loadFailed } from '../settings/parts/load-failed.ts';
 import { carriedQuery, nextPath } from './parts/handoff.ts';
 import { arrivalNotice } from './parts/notices.ts';
 import { stage } from './parts/stage.ts';

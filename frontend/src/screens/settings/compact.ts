@@ -1,4 +1,5 @@
 import { html, nothing, render } from '@lightstart/light/html';
+import { watch } from '../../app/load.ts';
 import { resourceFor } from '../../app/resources.ts';
 import { SETTINGS_PAGES, type SettingsPage, settingsPath } from '../../app/routes.ts';
 import { MORE_PAGES, signOut } from '../../app/shell.ts';
@@ -65,16 +66,6 @@ export function screen(ctx: ScreenContext): HTMLElement {
     );
   };
 
-  let shown = false;
-  const stop = menus.subscribe(() => {
-    if (element.isConnected) {
-      shown = true;
-    } else if (shown) {
-      stop();
-      return;
-    }
-    draw();
-  });
-  void menus.ensure();
+  watch(element, [menus], draw);
   return element;
 }

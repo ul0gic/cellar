@@ -1,18 +1,19 @@
-import type { PartyResult } from '@cellar/contract';
+import type { PartyLine, PartyResult } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventChecked, eventNumber } from '../../app/events.ts';
+import { onLeave, slowFlag } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { illustration } from '../../design-system/illustration.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
+import { formatCount } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { eventChecked, eventNumber } from '../recipes/parts/events.ts';
-import { actionFailed } from '../recipes/parts/failures.ts';
 import { openSheet } from '../recipes/parts/sheet.ts';
 import { undoAdded } from '../recipes/parts/shopping-undo.ts';
-import { onLeave, slowFlag } from '../recipes/parts/view.ts';
 import { countsText, mlText, ozText, PARTY_SERVINGS_MAX, readPlan, servingsFor } from './parts/party-state.ts';
 import './party.css';
 
@@ -21,6 +22,22 @@ type Loaded =
   | { readonly kind: 'empty' }
   | { readonly kind: 'failed' }
   | { readonly kind: 'ready'; readonly from: string | null; readonly result: PartyResult };
+
+function lineStatus(line: PartyLine): TemplateResult {
+  if (line.satisfied) {
+    return html`<span class="cl-party-status">
+      <cl-bulb size="mini" status="on" aria-hidden="true"></cl-bulb>${text('party.onHand')}
+    </span>`;
+  }
+  if (line.optionalOnly) {
+    return html`<span class="cl-party-status">
+      <cl-bulb size="mini" status="optional" aria-hidden="true"></cl-bulb>${text('party.optional')}
+    </span>`;
+  }
+  return html`<span class="cl-party-status is-missing">
+    <cl-bulb size="mini" status="off" aria-hidden="true"></cl-bulb>${text('party.missing')}
+  </span>`;
+}
 
 export function screen(ctx: ScreenContext): HTMLElement {
   const element = document.createElement('section');
@@ -148,7 +165,10 @@ export function screen(ctx: ScreenContext): HTMLElement {
         plan.same
           ? html`<cl-figure
                 .value=${plan.servings}
-                label=${text('party.servingsOfEach', { count: result.recipes.length, names })}
+                label=${text(plan.servings === 1 ? 'party.servingOfEach' : 'party.servingsOfEach', {
+                  drinks: formatCount(result.recipes.length, text('party.drinkOne'), text('party.drinkMany')),
+                  names,
+                })}
               ></cl-figure>
               <lc-number-input
                 stepper
@@ -212,12 +232,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                     ? html`<td colspan="2">${countsText(line)}</td>`
                     : html`<td class="cl-num">${mlText(line)}</td><td class="cl-num">${ozText(line)}</td>`
                 }
-                <td>
-                  <span class=${line.satisfied ? 'cl-party-status' : 'cl-party-status is-missing'}>
-                    <cl-bulb size="mini" status=${line.satisfied ? 'on' : 'off'} aria-hidden="true"></cl-bulb>
-                    ${line.satisfied ? text('party.onHand') : text('party.missing')}
-                  </span>
-                </td>
+                <td>${lineStatus(line)}</td>
               </tr>`,
             )}
           </tbody>

@@ -1,8 +1,8 @@
 import { call } from '../../../app/api.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
-import { actionFailed } from './failures.ts';
 
 export async function undoAdded(itemIds: readonly number[]): Promise<void> {
   try {

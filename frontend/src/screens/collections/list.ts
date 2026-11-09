@@ -1,6 +1,9 @@
 import { LIMITS } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
@@ -9,17 +12,14 @@ import { illustration } from '../../design-system/illustration.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { text } from '../../text/index.ts';
-import { eventText } from '../recipes/parts/events.ts';
-import { actionFailed } from '../recipes/parts/failures.ts';
 import { openSheet } from '../recipes/parts/sheet.ts';
-import { errorOf, onLeave, reload, slowFlag, watch } from '../recipes/parts/view.ts';
 import './collections.css';
 
 export function screen(ctx: ScreenContext): HTMLElement {
   const element = document.createElement('section');
   element.className = 'cl-collections';
   const list = resourceFor('listCollections', {}, { tags: ['collections'] });
-  const slow = slowFlag(() => draw());
+  let loadState: LoadState | null = null;
 
   const create = (): void => {
     let name = '';
@@ -60,7 +60,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const draw = (): void => {
     const data = list.peek();
-    const problem = errorOf(list);
+    const problem = loadState?.error(list) ?? null;
     const head = html`<header class="cl-collections-head">
       <h1 class="cl-collections-title">${text('nav.collections')}</h1>
       <lc-button variant="primary" @click=${create}>
@@ -72,16 +72,15 @@ export function screen(ctx: ScreenContext): HTMLElement {
         render(
           html`${head}<lc-empty-state title=${text('loadFailed.title', { screen: text('nav.collections') })} description=${text('loadFailed.body')}>
             ${illustration('empty-lost')}
-            <lc-button variant="primary" @click=${() => reload(list)}>${text('loadFailed.retry')}</lc-button>
+            <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
           </lc-empty-state>`,
           element,
         );
-      } else if (slow.slow() && element.querySelector('.cl-skeleton') === null) {
+      } else if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
         element.replaceChildren(skeleton('cards', text('nav.collections')));
       }
       return;
     }
-    slow.cancel();
     element.querySelector('.cl-skeleton')?.remove();
     render(
       html`${head}
@@ -120,10 +119,9 @@ export function screen(ctx: ScreenContext): HTMLElement {
     );
   };
 
-  const stop = watch(list, draw);
-  onLeave(element, () => {
-    slow.cancel();
-    stop();
+  watch(element, [list], (state) => {
+    loadState = state;
+    draw();
   });
   return element;
 }

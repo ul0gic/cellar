@@ -2,6 +2,9 @@ import type { RecipePage, RecipeSummary } from '@cellar/contract';
 import type { DropdownItem, TableColumn, TableRow } from '@lightstart/light/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { type LoadState, onLeave, type Watched, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
@@ -10,8 +13,6 @@ import { illustration } from '../../design-system/illustration.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
 import { isWide, openActions } from './parts/actions.ts';
-import { eventText } from './parts/events.ts';
-import { actionFailed } from './parts/failures.ts';
 import { openFilterSheet, SORT_KEYS } from './parts/filter-sheet.ts';
 import {
   apiQuery,
@@ -22,13 +23,14 @@ import {
   NO_FILTERS,
   readState,
   rememberView,
-  SORTS,
   STATUSES,
+  sortParam,
+  statusParam,
+  sortsFor,
   type Status,
   type View,
 } from './parts/list-query.ts';
 import { segmentsOf } from './parts/segments.ts';
-import { errorOf, onLeave, reload, slowFlag, watch } from './parts/view.ts';
 import './list.css';
 
 const STATUS_LABEL: Readonly<Record<Status, `recipes.${string}`>> = {
@@ -102,7 +104,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     const items = value === undefined ? [] : 'collections' in value ? value.collections : value.items;
     return items.find((item) => String(item.id) === id)?.name ?? '';
   };
-  const slow = slowFlag(() => draw());
+  let loadState: LoadState | null = null;
 
   const toggleFavorite = async (recipe: RecipeSummary): Promise<void> => {
     try {
@@ -122,7 +124,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const filters = (): void => {
     openFilterSheet(state, (result) =>
-      ctx.query.set({ ...filtersPatch(result.filters), sort: result.sort === 'rating' ? null : result.sort }, 'push'),
+      ctx.query.set({ ...filtersPatch(result.filters), sort: sortParam(result.sort, state.q) }, 'push'),
     ).catch((error: unknown) => actionFailed(error, () => filters()));
   };
 
@@ -141,20 +143,25 @@ export function screen(ctx: ScreenContext): HTMLElement {
   ];
 
   const sortItems = (): DropdownItem[] =>
-    SORTS.map((sort) => ({
+    sortsFor(state.q).map((sort) => ({
       label: text(SORT_KEYS[sort]),
       checked: sort === state.sort,
-      onClick: () => ctx.query.set({ sort: sort === 'rating' ? null : sort, page: null }, 'replace'),
+      onClick: () => ctx.query.set({ sort: sortParam(sort, state.q), page: null }, 'replace'),
     }));
 
+  const clearQuery = (): void => ctx.query.set({ q: null, page: null }, 'replace');
+  const clearAll = (): void => ctx.query.set({ ...filtersPatch(NO_FILTERS), q: null }, 'replace');
+
   const activeTags = (): TemplateResult | typeof nothing => {
-    const count = filterCount(state.filters);
-    if (count === 0) {
+    if (filterCount(state.filters) === 0 && state.q === null) {
       return nothing;
     }
     const f = state.filters;
     const chips: { label: string; remove: () => void }[] = [];
     const drop = (patch: Partial<typeof f>): void => ctx.query.set(filtersPatch({ ...f, ...patch }), 'replace');
+    if (state.q !== null) {
+      chips.push({ label: text('recipes.tagQuery', { query: state.q }), remove: clearQuery });
+    }
     for (const id of f.glass) {
       chips.push({
         label: nameOf(glasses, id),
@@ -196,7 +203,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           >${tag.label}</lc-tag
         >`,
       )}
-      <lc-button variant="ghost" size="sm" @click=${() => ctx.query.set(filtersPatch(NO_FILTERS), 'replace')}
+      <lc-button variant="ghost" size="sm" @click=${clearAll}
         >${text('recipes.clearAll')}</lc-button
       >
     </div>`;
@@ -257,7 +264,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           size="sm"
           variant=${status === state.status ? 'primary' : 'quiet'}
           aria-pressed=${status === state.status ? 'true' : 'false'}
-          @click=${() => ctx.query.set({ status: status === 'can-make' ? null : status, page: null }, 'push')}
+          @click=${() => ctx.query.set({ status: statusParam(status, state.q), page: null }, 'push')}
         >${text(STATUS_LABEL[status])}${chip === null ? nothing : html` <span class="cl-recipes-chip-count">${chip}</span>`}</lc-button>`;
       })}
     </div>
@@ -359,11 +366,11 @@ export function screen(ctx: ScreenContext): HTMLElement {
   };
 
   const emptyState = (page: RecipePage): TemplateResult => {
-    const filtered = filterCount(state.filters) > 0;
+    const filtered = filterCount(state.filters) > 0 || state.q !== null;
     if (filtered) {
       return html`<lc-empty-state title=${text('recipes.noMatchTitle')} description=${text('recipes.noMatchBody')}>
         ${illustration('empty-glass')}
-        <lc-button variant="primary" @click=${() => ctx.query.set(filtersPatch(NO_FILTERS), 'replace')}>${text('recipes.clearFilters')}</lc-button>
+        <lc-button variant="primary" @click=${clearAll}>${text('recipes.clearFilters')}</lc-button>
         <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.searchAll', { count: page.facets.all })}</lc-button>
       </lc-empty-state>`;
     }
@@ -392,21 +399,21 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const draw = (): void => {
     const page = source.peek() ?? lastPage;
-    const problem = errorOf(source);
+    const problem = loadState?.error(source) ?? null;
     if (source.peek() !== undefined) {
       lastPage = source.peek();
-      slow.cancel();
     }
     let body: TemplateResult | HTMLElement | typeof nothing = nothing;
     if (problem !== null && source.peek() === undefined) {
       body = html`<lc-alert variant="error" icon="circle-alert" title=${text('recipes.listFailedTitle')}>
         <p>${text('recipes.listFailedBody')}</p>
         <div class="cl-banner-actions">
-          <lc-button size="sm" @click=${() => reload(source)}>${text('loadFailed.retry')}</lc-button>
+          <lc-button size="sm" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
         </div>
       </lc-alert>`;
     } else if (source.peek() === undefined) {
-      body = slow.slow() ? skeleton(state.view === 'cards' ? 'cards' : 'rows', text('nav.recipes')) : nothing;
+      body =
+        loadState?.slow === true ? skeleton(state.view === 'cards' ? 'cards' : 'rows', text('nav.recipes')) : nothing;
     } else if (page !== undefined) {
       body = page.items.length === 0 ? emptyState(page) : html`${results(page)} ${pager(page)}`;
     }
@@ -417,26 +424,25 @@ export function screen(ctx: ScreenContext): HTMLElement {
   };
 
   let key = JSON.stringify(apiQuery(state));
-  let stopSource = watch(source, draw);
-  const stopNames = [glasses, methods, tags, collections].map((names) => watch(names, draw));
+  const watchSource = (): Watched =>
+    watch(element, [source], (current) => {
+      loadState = current;
+      draw();
+    });
+  let sourceWatch = watchSource();
+  watch(element, [glasses, methods, tags, collections], () => draw());
   const stopQuery = ctx.query.subscribe(() => {
     state = readState(ctx.query);
     const next = JSON.stringify(apiQuery(state));
     if (next !== key) {
       key = next;
-      stopSource();
+      sourceWatch.stop();
       source = resourceFor('listRecipes', { query: apiQuery(state) }, { tags: ['recipes', 'shelf'] });
-      stopSource = watch(source, draw);
+      sourceWatch = watchSource();
+      return;
     }
     draw();
   });
-  onLeave(element, () => {
-    slow.cancel();
-    stopSource();
-    stopQuery();
-    for (const stop of stopNames) {
-      stop();
-    }
-  });
+  onLeave(element, stopQuery);
   return element;
 }

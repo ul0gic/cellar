@@ -180,7 +180,7 @@ export const RecipeListQuerySchema = z.object({
   abvMax: abvBound.optional(),
   ratingMin: queryNumber.pipe(RatingValueSchema).optional(),
   provenance: ProvenanceSchema.optional(),
-  sort: z.enum(['name', 'rating', 'abv', 'added']).optional(),
+  sort: z.enum(['relevance', 'name', 'rating', 'abv', 'added']).optional(),
   order: SortOrderSchema.optional(),
   ...pageQueryShape,
 });

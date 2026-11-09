@@ -1,6 +1,9 @@
 import type { BottleSummary, BuyNextItem, Home, Job, RecipeSummary, ShoppingListItem } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { eventChecked } from '../../app/events.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
@@ -12,10 +15,8 @@ import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { eventChecked } from '../settings/parts/events.ts';
 import { followJob, jobProgress } from '../settings/parts/job.ts';
-import { actionFailed } from '../settings/parts/problems.ts';
-import { loadFailed, watch } from '../settings/parts/watch.ts';
+import { loadFailed } from '../settings/parts/load-failed.ts';
 import './home.css';
 
 const COLLAGE_SIZE = 3;
@@ -208,7 +209,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return html`<lc-alert class="cl-home-notice" variant="info" title=${text('home.updateTitle')}>
       ${text('home.updateBody', { version: update.version })}
       <div class="cl-banner-actions">
-        <lc-button variant="quiet" href="/settings/catalog">${text('home.updateSee')}</lc-button>
+        <lc-button variant="quiet" href=${href('/settings/catalog')}>${text('home.updateSee')}</lc-button>
       </div>
     </lc-alert>`;
   };
@@ -336,10 +337,10 @@ export function screen(ctx: ScreenContext): HTMLElement {
             <b>${text('home.stepBottles')}</b>
             <p>${text('home.stepBottlesBody')}</p>
             <span class="cl-step-actions">
-              <lc-button variant="primary" href="/shelf?add=1"
+              <lc-button variant="primary" href=${href('/shelf?add=1')}
                 ><lc-icon name="plus" aria-hidden="true"></lc-icon>${text('home.addBottles')}</lc-button
               >
-              <lc-button variant="quiet" href="/import"
+              <lc-button variant="quiet" href=${href('/import')}
                 ><lc-icon name="file-spreadsheet" aria-hidden="true"></lc-icon>${text('home.importCsv')}</lc-button
               >
             </span>
@@ -349,7 +350,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           <div>
             <b>${text('home.stepFresh')}</b>
             <p>${text('home.stepFreshBody')}</p>
-            <lc-button variant="quiet" href="/ingredients">${text('home.openIngredients')}</lc-button>
+            <lc-button variant="quiet" href=${href('/ingredients')}>${text('home.openIngredients')}</lc-button>
           </div>
         </li>
         <li>
@@ -379,18 +380,18 @@ export function screen(ctx: ScreenContext): HTMLElement {
   };
 
   const resources = [home, top, anyRecipes, bottles, shopping, ...(notifications === null ? [] : [notifications])];
-  const redraw = watch(element, resources, ({ state, retry }) => {
+  const { redraw } = watch(element, resources, ({ phase, retry }) => {
     const session = ctx.person.current();
     const data = home.peek();
-    if (state === 'failed') {
+    if (phase === 'failed') {
       render(loadFailed(text('title.home'), retry), element);
       return;
     }
-    if (state === 'slow') {
+    if (phase === 'slow') {
       render(html`${skeleton('figure', text('title.home'))}${skeleton('rows', text('title.home'))}`, element);
       return;
     }
-    if (state !== 'ready' || session === null || data === undefined) {
+    if (phase !== 'ready' || session === null || data === undefined) {
       return;
     }
     render(ready(data, session), element);

@@ -15,7 +15,7 @@
     "build:frontend": "pnpm --filter @cellar/frontend exec vite build",
     "catalog:build": "node catalog/bin/cellar-catalog.ts build --out catalog/out",
     "dev": "CELLAR_DATA_DIR=.rig/dev-data node backend/bin/cellar.ts serve",
-    "docker:build": "docker build -t cellar:dev ."
+    "docker:build": "docker build --build-arg CELLAR_VERSION=$(node -p \"require('./backend/package.json').version\") -t cellar:dev ."
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",

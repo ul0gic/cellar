@@ -1,11 +1,12 @@
 import type { Stats } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import { type LoadState, watch } from '../../app/load.ts';
 import { resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { formatDate, formatNumber, formatWholeMoney } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { follow, type LoadState, pricesSwitch, waiting, watch } from '../shelf/parts/kit.ts';
+import { follow, pricesSwitch, waiting } from '../shelf/parts/kit.ts';
 import './stats.css';
 
 type ChartId = 'finished' | 'spend';
@@ -302,10 +303,10 @@ export function screen(ctx: ScreenContext): HTMLElement {
     );
   };
 
-  let stop = watch(element, [stats], draw);
+  let stop = watch(element, [stats], draw).stop;
   follow(element, ctx.person.subscribe, () => {
     stop();
-    stop = watch(element, [stats], draw);
+    stop = watch(element, [stats], draw).stop;
   });
   return element;
 }

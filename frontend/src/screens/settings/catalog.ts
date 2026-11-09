@@ -1,17 +1,26 @@
 import type { CatalogStatus, Job } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed, problemText } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
-import { formatNumber } from '../../text/format.ts';
+import { formatCount } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
 import { switchField } from './parts/fields.ts';
 import { settingsPage } from './parts/frame.ts';
 import { followJob, jobProgress } from './parts/job.ts';
-import { actionFailed, problemText } from './parts/problems.ts';
-import { loadFailed, watch } from './parts/watch.ts';
+import { loadFailed } from './parts/load-failed.ts';
+
+function recipes(count: number): string {
+  return formatCount(count, text('settings.count.recipeOne'), text('settings.count.recipeMany'));
+}
+
+function ingredients(count: number): string {
+  return formatCount(count, text('settings.count.ingredientOne'), text('settings.count.ingredientMany'));
+}
 
 export function screen(ctx: ScreenContext): HTMLElement {
   return settingsPage(ctx, 'catalog', (main) => {
@@ -29,7 +38,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
         toast({ title: finished.error?.detail ?? text('settings.catalog.failed'), variant: 'error' });
       } else if (finished.result !== null && 'added' in finished.result) {
         toast({
-          title: text('settings.catalog.applied', { count: formatNumber(finished.result.added.recipes) }),
+          title: text('settings.catalog.applied', { recipes: recipes(finished.result.added.recipes) }),
         });
       }
       invalidate('settings', 'recipes', 'ingredients', 'shelf');
@@ -97,8 +106,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
               ><span
                 >${text('settings.catalog.loadedBody', {
                   version: current.loaded.version,
-                  recipes: formatNumber(current.loaded.counts.recipes),
-                  ingredients: formatNumber(current.loaded.counts.ingredients),
+                  recipes: recipes(current.loaded.counts.recipes),
+                  ingredients: ingredients(current.loaded.counts.ingredients),
                 })}</span
               ></span
             >
@@ -112,8 +121,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
             ><b>${text('settings.catalog.available', { version })}</b
             ><span
               >${text('settings.catalog.adds', {
-                recipes: formatNumber(current.available.adds.recipes),
-                ingredients: formatNumber(current.available.adds.ingredients),
+                recipes: recipes(current.available.adds.recipes),
+                ingredients: ingredients(current.available.adds.ingredients),
               })}</span
             ></span
           >
@@ -157,13 +166,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </div>
     </section>`;
 
-    const redraw = watch(main, [status], ({ state, retry }) => {
+    const { redraw } = watch(main, [status], ({ phase, retry }) => {
       const current = status.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.catalog'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('lines', text('settings.catalog')), main);
-      } else if (state === 'ready' && current !== undefined) {
+      } else if (phase === 'ready' && current !== undefined) {
         render(view(current), main);
       }
     });

@@ -1,14 +1,17 @@
 import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { ResourceHandle } from '@lightstart/light/controller';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError } from '../../../app/api.ts';
+import { eventText } from '../../../app/events.ts';
+import { watch } from '../../../app/load.ts';
+import { actionFailed, problemText } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
 import { confirm } from '../../../design-system/dialogs.ts';
 import { skeleton } from '../../../design-system/skeleton.ts';
+import { formatNumber } from '../../../text/format.ts';
 import { text } from '../../../text/index.ts';
-import { eventValue } from './events.ts';
-import { actionFailed, problemText } from './problems.ts';
+import { loadFailed } from './load-failed.ts';
 import { openSheet } from './sheet.ts';
-import { loadFailed, type Watchable, watch } from './watch.ts';
 
 export interface TaxonRow {
   readonly id: number;
@@ -20,7 +23,7 @@ export interface TaxonKind {
   readonly key: string;
   readonly heading: string;
   readonly noun: string;
-  readonly source: Watchable & { peek(): { readonly items: readonly TaxonRow[] } | undefined };
+  readonly source: Omit<ResourceHandle, 'peek'> & { peek(): { readonly items: readonly TaxonRow[] } | undefined };
   readonly dilution?: boolean;
   readonly describe?: (row: TaxonRow) => string;
   readonly create: (name: string, dilutionPercent: number) => Promise<unknown>;
@@ -81,7 +84,7 @@ function renameSheet(kind: TaxonKind, row: TaxonRow): void {
         .value=${name}
         error-message=${error}
         @input=${(event: Event) => {
-          name = eventValue(event);
+          name = eventText(event);
         }}
       ></lc-input>
     </form>`,
@@ -109,7 +112,10 @@ export function taxonLists(main: HTMLElement, screenName: string, kinds: readonl
     if (row.usageCount > 0) {
       const sure = await confirm({
         title: text('settings.taxonomy.removeTitle', { name: row.name }),
-        message: text('settings.taxonomy.removeBody', { count: row.usageCount, noun: kind.noun }),
+        message:
+          row.usageCount === 1
+            ? text('settings.taxonomy.removeBodyOne', { noun: kind.noun })
+            : text('settings.taxonomy.removeBody', { count: formatNumber(row.usageCount), noun: kind.noun }),
         confirmLabel: text('settings.taxonomy.removeConfirm', { noun: kind.noun }),
         danger: true,
       });
@@ -222,7 +228,7 @@ export function taxonLists(main: HTMLElement, screenName: string, kinds: readonl
           .value=${draft.name}
           error-message=${draft.error}
           @input=${(event: Event) => {
-            draft.name = eventValue(event);
+            draft.name = eventText(event);
           }}
         ></lc-input>
         ${
@@ -235,7 +241,7 @@ export function taxonLists(main: HTMLElement, screenName: string, kinds: readonl
                 max=${DILUTION_MAX}
                 .value=${draft.dilution}
                 @input=${(event: Event) => {
-                  draft.dilution = eventValue(event);
+                  draft.dilution = eventText(event);
                 }}
               ></lc-input>`
             : nothing
@@ -247,15 +253,15 @@ export function taxonLists(main: HTMLElement, screenName: string, kinds: readonl
     </section>`;
   };
 
-  const redraw = watch(
+  const { redraw } = watch(
     main,
     kinds.map((kind) => kind.source),
-    ({ state, retry }) => {
-      if (state === 'failed') {
+    ({ phase, retry }) => {
+      if (phase === 'failed') {
         render(loadFailed(screenName, retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('rows', screenName), main);
-      } else if (state === 'ready') {
+      } else if (phase === 'ready') {
         render(html`${kinds.map(section)}`, main);
       }
     },

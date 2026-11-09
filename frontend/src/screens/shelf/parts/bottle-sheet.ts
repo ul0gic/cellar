@@ -9,12 +9,15 @@ import {
 import type { Resource } from '@lightstart/light/controller';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../../app/api.ts';
+import { eventField, eventNumber, eventText } from '../../../app/events.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
+import { today } from '../../../app/today.ts';
 import type { PersonSignal } from '../../../app/types.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { formatNumber } from '../../../text/format.ts';
 import { text } from '../../../text/index.ts';
-import { actionFailed, eventNumber, eventText, eventValue, fieldError, sheet, today } from './kit.ts';
+import { fieldError, sheet } from './kit.ts';
 
 // D-1 §9.8: the labeled sizes the size select offers.
 const SIZES = ['50 ml', '200 ml', '375 ml', '500 ml', '700 ml', '750 ml', '1 L', '1.75 L', '12 fl oz', '25.4 fl oz'];
@@ -321,7 +324,7 @@ export function bottleSheet(host: BottleSheetHost): BottleSheet {
         ]}
         value=${current.status}
         @change=${(event: Event) => {
-          current.status = eventValue(event) === 'open' ? 'open' : 'sealed';
+          current.status = eventField(event, 'value') === 'open' ? 'open' : 'sealed';
         }}
       ></lc-segmented>
     </div>

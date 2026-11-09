@@ -1,15 +1,16 @@
 import type { HouseholdSubstitution, SubstitutionEffect } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { detailText, eventPick } from '../../app/events.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed, problemText } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
-import { eventPick, eventText } from './parts/events.ts';
 import { segmentedField } from './parts/fields.ts';
 import { settingsPage } from './parts/frame.ts';
-import { actionFailed, problemText } from './parts/problems.ts';
-import { loadFailed, watch } from './parts/watch.ts';
+import { loadFailed } from './parts/load-failed.ts';
 
 const PICKER_ROWS = 8;
 
@@ -66,7 +67,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
         placeholder=${text('settings.subs.placeholder')}
         query=${state.picked?.title ?? ''}
         .docs=${state.docs}
-        @search-input=${(event: Event) => void lookup(state, eventText(event))}
+        @search-input=${(event: Event) => void lookup(state, detailText(event))}
         @search-select=${(event: Event) => {
           state.picked = eventPick(event);
           formError = '';
@@ -184,13 +185,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </form>
     </section>`;
 
-    const redraw = watch(main, [substitutions], ({ state, retry }) => {
+    const { redraw } = watch(main, [substitutions], ({ phase, retry }) => {
       const list = substitutions.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.substitutions'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('rows', text('settings.substitutions')), main);
-      } else if (state === 'ready' && list !== undefined) {
+      } else if (phase === 'ready' && list !== undefined) {
         render(view(list.substitutions), main);
       }
     });

@@ -69,8 +69,8 @@ importers:
         specifier: 1.2.152
         version: 1.2.152
       '@lightstart/light':
-        specifier: github:ul0gic/lightstart#586d4f6de37ea9933dadcab25e34f584c5e89636
-        version: https://codeload.github.com/ul0gic/lightstart/tar.gz/586d4f6de37ea9933dadcab25e34f584c5e89636(typescript@7.0.2)
+        specifier: github:ul0gic/lightstart#60527fae27319f04851b3f2e3a59c1e3c31069bd
+        version: https://codeload.github.com/ul0gic/lightstart/tar.gz/60527fae27319f04851b3f2e3a59c1e3c31069bd(typescript@7.0.2)
       tailwindcss:
         specifier: 4.3.5
         version: 4.3.5
@@ -237,8 +237,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lightstart/light@https://codeload.github.com/ul0gic/lightstart/tar.gz/586d4f6de37ea9933dadcab25e34f584c5e89636':
-    resolution: {tarball: https://codeload.github.com/ul0gic/lightstart/tar.gz/586d4f6de37ea9933dadcab25e34f584c5e89636}
+  '@lightstart/light@https://codeload.github.com/ul0gic/lightstart/tar.gz/60527fae27319f04851b3f2e3a59c1e3c31069bd':
+    resolution: {tarball: https://codeload.github.com/ul0gic/lightstart/tar.gz/60527fae27319f04851b3f2e3a59c1e3c31069bd}
     version: 0.1.0
     hasBin: true
     peerDependencies:
@@ -1165,7 +1165,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@lightstart/light@https://codeload.github.com/ul0gic/lightstart/tar.gz/586d4f6de37ea9933dadcab25e34f584c5e89636(typescript@7.0.2)':
+  '@lightstart/light@https://codeload.github.com/ul0gic/lightstart/tar.gz/60527fae27319f04851b3f2e3a59c1e3c31069bd(typescript@7.0.2)':
     optionalDependencies:
       typescript: 7.0.2
 

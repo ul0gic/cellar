@@ -1,9 +1,10 @@
 import { html, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { today } from '../../app/today.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { formatDate } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { printedOn, todayIso, toolbar } from './parts/frame.ts';
+import { printedOn, toolbar } from './parts/frame.ts';
 
 export function screen(_ctx: ScreenContext): HTMLElement {
   const element = document.createElement('div');
@@ -12,7 +13,7 @@ export function screen(_ctx: ScreenContext): HTMLElement {
   };
   call('getShoppingList', {}).then(
     (list) => {
-      const date = formatDate(todayIso());
+      const date = formatDate(today());
       show(html`<article class="cl-printed">
         <h1 class="cl-print-title">${text('print.shoppingList')}</h1>
         <p class="cl-print-sub">

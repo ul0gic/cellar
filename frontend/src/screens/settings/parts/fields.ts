@@ -1,5 +1,5 @@
 import { html, type TemplateResult } from '@lightstart/light/html';
-import { eventChecked, eventValue } from './events.ts';
+import { eventChecked, eventText } from '../../../app/events.ts';
 
 export function switchField(
   label: string,
@@ -43,7 +43,7 @@ export function segmentedField(
       label=${label}
       .options=${options.map((option) => ({ value: option.value, label: option.label }))}
       value=${value}
-      @change=${(event: Event) => change(eventValue(event))}
+      @change=${(event: Event) => change(eventText(event))}
     ></lc-segmented>
   </div>`;
 }

@@ -340,6 +340,7 @@ CREATE TABLE menus (
   is_live INTEGER NOT NULL DEFAULT 0,
   token TEXT NULL UNIQUE,
   live_since TEXT NULL,
+  ended_at TEXT NULL,
   created_by INTEGER NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

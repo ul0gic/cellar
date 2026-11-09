@@ -2,17 +2,18 @@ import { LIMITS, type Member } from '@cellar/contract';
 import type { LightElements } from '@lightstart/light/components/elements.js';
 import { html, nothing, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed, fieldError, problemText } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext, SessionPerson } from '../../app/types.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
-import { eventValue } from './parts/events.ts';
 import { settingsPage } from './parts/frame.ts';
-import { actionFailed, fieldError, problemText } from './parts/problems.ts';
+import { loadFailed } from './parts/load-failed.ts';
 import { openSheet } from './parts/sheet.ts';
-import { loadFailed, watch } from './parts/watch.ts';
 
 interface OneTime {
   readonly name: string;
@@ -74,7 +75,7 @@ function memberSheet(
         .value=${name}
         error-message=${nameError}
         @input=${(event: Event) => {
-          name = eventValue(event);
+          name = eventText(event);
         }}
       ></lc-input>
       ${
@@ -88,7 +89,7 @@ function memberSheet(
                 error-message=${passwordError}
                 hint=${text('settings.members.passwordHint')}
                 @input=${(event: Event) => {
-                  password = eventValue(event);
+                  password = eventText(event);
                 }}
               ></lc-input>
             </div>`
@@ -243,13 +244,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       }
     </section>`;
 
-    const redraw = watch(main, [members], ({ state, retry }) => {
+    const { redraw } = watch(main, [members], ({ phase, retry }) => {
       const list = members.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.members'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('rows', text('settings.members')), main);
-      } else if (state === 'ready' && list !== undefined) {
+      } else if (phase === 'ready' && list !== undefined) {
         render(view(list.members), main);
       }
     });

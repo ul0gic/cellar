@@ -12,6 +12,7 @@
 
 .cl-shopping-count {
   flex: none;
+  width: auto;
 }
 
 .cl-shopping-add {

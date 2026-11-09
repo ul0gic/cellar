@@ -1,6 +1,9 @@
 import { LIMITS, type Profile, type ProfilePatch, type ThemeChoice } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed, fieldError, problemText } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { chooseTheme } from '../../app/theme.ts';
 import type { ScreenContext } from '../../app/types.ts';
@@ -8,12 +11,10 @@ import type { ImageUpload } from '../../design-system/cl-image-field.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
-import { eventValue } from './parts/events.ts';
 import { segmentedField, switchField } from './parts/fields.ts';
 import { settingsPage } from './parts/frame.ts';
-import { actionFailed, fieldError, problemText } from './parts/problems.ts';
+import { loadFailed } from './parts/load-failed.ts';
 import { openSheet } from './parts/sheet.ts';
-import { loadFailed, watch } from './parts/watch.ts';
 
 function isTheme(value: string): value is ThemeChoice {
   return value === 'system' || value === 'light' || value === 'dark';
@@ -90,7 +91,7 @@ function changePassword(): void {
       autocomplete=${autocomplete}
       .value=${value}
       error-message=${error}
-      @input=${(event: Event) => set(eventValue(event))}
+      @input=${(event: Event) => set(eventText(event))}
     ></lc-input>`;
   const sheet = openSheet(text('settings.profile.changePassword'), () => ({
     body: html`<form
@@ -174,7 +175,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           .value=${name ?? profile.name}
           error-message=${nameError}
           @input=${(event: Event) => {
-            name = eventValue(event);
+            name = eventText(event);
           }}
           @change=${() => saveName(profile)}
         ></lc-input>
@@ -226,13 +227,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </div>
     </section>`;
 
-    const redraw = watch(main, [me, members], ({ state, retry }) => {
+    const { redraw } = watch(main, [me, members], ({ phase, retry }) => {
       const profile = me.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.profile'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('lines', text('settings.profile')), main);
-      } else if (state === 'ready' && profile !== undefined) {
+      } else if (phase === 'ready' && profile !== undefined) {
         render(view(profile), main);
       }
     });

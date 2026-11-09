@@ -1,9 +1,9 @@
-import type { OperationInput, RatingValue, RecipeFacets } from '@cellar/contract';
+import { LIMITS, type OperationInput, type RatingValue, type RecipeFacets } from '@cellar/contract';
 import type { QueryPatch, QuerySignal } from '../../../app/types.ts';
 
 export const STATUSES = ['can-make', 'missing-1', 'missing-2', 'all', 'favorites', 'made'] as const;
 export type Status = (typeof STATUSES)[number];
-export const SORTS = ['rating', 'name', 'abv', 'added'] as const;
+export const SORTS = ['relevance', 'rating', 'name', 'abv', 'added'] as const;
 export type Sort = (typeof SORTS)[number];
 export type View = 'cards' | 'list';
 
@@ -23,6 +23,7 @@ export interface ListFilters {
 }
 
 export interface ListState {
+  readonly q: string | null;
   readonly status: Status;
   readonly sort: Sort;
   readonly view: View;
@@ -55,13 +56,36 @@ function numberText(raw: string | null): string | null {
   return raw !== null && raw.trim() !== '' && Number.isFinite(Number(raw)) ? raw : null;
 }
 
+export function defaultStatus(q: string | null): Status {
+  return q === null ? 'can-make' : 'all';
+}
+
+export function statusParam(status: Status, q: string | null): string | null {
+  return status === defaultStatus(q) ? null : status;
+}
+
+export function defaultSort(q: string | null): Sort {
+  return q === null ? 'rating' : 'relevance';
+}
+
+export function sortsFor(q: string | null): readonly Sort[] {
+  return q === null ? SORTS.filter((sort) => sort !== 'relevance') : SORTS;
+}
+
+export function sortParam(sort: Sort, q: string | null): string | null {
+  return sort === defaultSort(q) ? null : sort;
+}
+
 export function readState(query: QuerySignal): ListState {
-  const status = STATUSES.find((item) => item === query.get('status')) ?? 'can-make';
-  const sort = SORTS.find((item) => item === query.get('sort')) ?? 'rating';
+  const typed = (query.get('q') ?? '').trim().slice(0, LIMITS.searchQuery.max);
+  const q = typed === '' ? null : typed;
+  const status = STATUSES.find((item) => item === query.get('status')) ?? defaultStatus(q);
+  const sort = sortsFor(q).find((item) => item === query.get('sort')) ?? defaultSort(q);
   const viewParam = query.get('view');
   const page = Number(query.get('page'));
   const rating = Number(query.get('rating_min'));
   return {
+    q,
     status,
     sort,
     view: viewParam === 'list' || viewParam === 'cards' ? viewParam : rememberedView(),
@@ -124,6 +148,7 @@ export function apiQuery(state: ListState, pageSize: number = PAGE_SIZE[state.vi
   const filters = state.filters;
   const collection = Number(filters.collection);
   return {
+    ...(state.q === null ? {} : { q: state.q }),
     ...(state.status === 'can-make' ? { status: 'can_make' } : {}),
     ...(state.status === 'missing-1' ? { status: 'missing_1' } : {}),
     ...(state.status === 'missing-2' ? { status: 'missing_2' } : {}),

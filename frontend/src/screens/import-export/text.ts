@@ -68,6 +68,7 @@ export const strings = {
   'import-export.chosen': 'Chosen: {file}',
   'import-export.notRecipes': "That isn't a Cellar recipe export.",
   'import-export.parent': 'New ingredients go under',
+  'import-export.topLevel': 'Top level',
   'import-export.importRecipes': 'Import recipes',
   'import-export.importingRecipes': 'Importing {file}...',
   'import-export.result': 'Result',

@@ -49,7 +49,7 @@ export const RecipeImportPartsSchema = z.object({
   file: z.file().mime(['application/json', 'application/zip']),
   mode: ImportModeSchema,
   duplicate: DuplicateRuleSchema,
-  unmatchedParentId: queryId,
+  unmatchedParentId: queryId.optional(),
   fetchRemoteImages: queryBoolean,
 });
 export type RecipeImportParts = z.infer<typeof RecipeImportPartsSchema>;

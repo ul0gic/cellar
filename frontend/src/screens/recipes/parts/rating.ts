@@ -1,9 +1,9 @@
 import type { HouseholdRating, RatingState, RatingValue } from '@cellar/contract';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
+import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
 import { text } from '../../../text/index.ts';
-import { actionFailed } from './failures.ts';
 
 const HINT_KEY = 'cellar.ratingHintSeen';
 const RATING_VALUES: readonly RatingValue[] = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];

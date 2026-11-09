@@ -6,6 +6,7 @@ import type { ScreenContext } from '../../app/types.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
 import { text } from '../../text/index.ts';
 import { servingsOf } from '../recipes/parts/servings.ts';
+import { methodSteps } from '../recipes/parts/steps.ts';
 import { printedOn, toolbar } from './parts/frame.ts';
 
 function summary(recipe: Recipe, servings: number): string {
@@ -65,10 +66,7 @@ function details(recipe: Recipe): TemplateResult {
 
 function page(recipe: Recipe, unit: PreferredUnit, servings: number): TemplateResult {
   const image = recipe.images[0];
-  const steps = recipe.instructions
-    .split(/\n+/)
-    .map((step) => step.trim())
-    .filter((step) => step !== '');
+  const steps = methodSteps(recipe.instructions);
   return html`<article class="cl-printed">
     <h1 class="cl-print-title">${recipe.name}</h1>
     <p class="cl-print-sub">${summary(recipe, servings)}</p>

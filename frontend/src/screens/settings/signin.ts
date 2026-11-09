@@ -1,16 +1,17 @@
 import type { HouseholdSettings, SettingsPatch } from '@cellar/contract';
 import { html, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { watch } from '../../app/load.ts';
+import { actionFailed, problemText } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
-import { eventValue } from './parts/events.ts';
 import { segmentedField, switchField } from './parts/fields.ts';
 import { settingsPage } from './parts/frame.ts';
-import { actionFailed, problemText } from './parts/problems.ts';
+import { loadFailed } from './parts/load-failed.ts';
 import { openSheet } from './parts/sheet.ts';
-import { loadFailed, watch } from './parts/watch.ts';
 
 const CURRENCY = /^[A-Z]{3}$/;
 
@@ -67,7 +68,7 @@ function confirmRequireLogin(on: boolean, done: (changed: boolean) => void, refr
         .value=${password}
         error-message=${error}
         @input=${(event: Event) => {
-          password = eventValue(event);
+          password = eventText(event);
         }}
       ></lc-input>
     </form>`,
@@ -134,7 +135,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
               error-message=${currencyError}
               hint=${text('settings.signin.currencyHint')}
               @input=${(event: Event) => {
-                currency = eventValue(event);
+                currency = eventText(event);
               }}
               @change=${() => saveCurrency(current)}
             ></lc-input>
@@ -151,13 +152,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
         </div>
       </section>`;
 
-    const redraw = watch(main, [settings], ({ state, retry }) => {
+    const { redraw } = watch(main, [settings], ({ phase, retry }) => {
       const current = settings.peek();
-      if (state === 'failed') {
+      if (phase === 'failed') {
         render(loadFailed(text('settings.signin'), retry), main);
-      } else if (state === 'slow') {
+      } else if (phase === 'slow') {
         render(skeleton('lines', text('settings.signin')), main);
-      } else if (state === 'ready' && current !== undefined) {
+      } else if (phase === 'ready' && current !== undefined) {
         render(view(current), main);
       }
     });

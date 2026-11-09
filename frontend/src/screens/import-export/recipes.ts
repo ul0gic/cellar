@@ -7,12 +7,14 @@ import {
 } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { droppedFile, eventField } from '../../app/events.ts';
 import { invalidate } from '../../app/resources.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { text } from '../../text/index.ts';
-import { detailField, droppedFile } from './files.ts';
 
 const DUPLICATE_RULES: readonly DuplicateRule[] = ['skip', 'update', 'create'];
+
+const TOP_LEVEL = 'top';
 
 interface ParentOption {
   readonly value: string;
@@ -101,8 +103,9 @@ export function recipesPanel(): HTMLElement {
   element.className = 'cl-import-recipes';
 
   let file: File | null = null;
-  let parentId = '';
-  let options: ParentOption[] = [];
+  let parentId = TOP_LEVEL;
+  const topLevel: ParentOption = { value: TOP_LEVEL, label: text('import-export.topLevel') };
+  let options: ParentOption[] = [topLevel];
   let duplicate: DuplicateRule = 'skip';
   let busy = false;
   let fileError: string | null = null;
@@ -110,7 +113,7 @@ export function recipesPanel(): HTMLElement {
   let report: RecipeImportReport | null = null;
 
   const importNow = async (): Promise<void> => {
-    if (file === null || parentId === '') {
+    if (file === null) {
       return;
     }
     const chosen = file;
@@ -133,7 +136,9 @@ export function recipesPanel(): HTMLElement {
     body.append('file', new File([chosen], chosen.name, { type }));
     body.append('mode', 'commit');
     body.append('duplicate', duplicate);
-    body.append('unmatchedParentId', parentId);
+    if (parentId !== TOP_LEVEL) {
+      body.append('unmatchedParentId', parentId);
+    }
     body.append('fetchRemoteImages', String(fetchPhotos));
     try {
       report = await call('importRecipes', { body });
@@ -187,9 +192,6 @@ export function recipesPanel(): HTMLElement {
           .showPreview=${false}
           ?disabled=${busy}
           @change=${(event: Event) => {
-            if (!(event instanceof CustomEvent)) {
-              return;
-            }
             file = droppedFile(event);
             fileError = null;
             report = null;
@@ -206,10 +208,10 @@ export function recipesPanel(): HTMLElement {
             required
             .options=${options}
             value=${parentId}
-            ?disabled=${busy || options.length === 0}
+            ?disabled=${busy}
             @change=${(event: Event) => {
-              const value = detailField(event, 'value');
-              parentId = typeof value === 'string' ? value : '';
+              const value = eventField(event, 'value');
+              parentId = typeof value === 'string' ? value : TOP_LEVEL;
               draw();
             }}
           ></lc-select>
@@ -223,7 +225,7 @@ export function recipesPanel(): HTMLElement {
             value=${duplicate}
             ?disabled=${busy}
             @change=${(event: Event) => {
-              const value = detailField(event, 'value');
+              const value = eventField(event, 'value');
               duplicate = DUPLICATE_RULES.find((rule) => rule === value) ?? duplicate;
             }}
           ></lc-select>
@@ -238,7 +240,7 @@ export function recipesPanel(): HTMLElement {
             : nothing
         }
         <div class="cl-import-actions">
-          <lc-button variant="primary" ?disabled=${busy || file === null || parentId === ''} @click=${() => void importNow()}>
+          <lc-button variant="primary" ?disabled=${busy || file === null} @click=${() => void importNow()}>
             ${text('import-export.importRecipes')}
           </lc-button>
         </div>
@@ -251,7 +253,7 @@ export function recipesPanel(): HTMLElement {
   draw();
   call('getIngredientTree', {})
     .then((tree) => {
-      options = parentOptions(tree);
+      options = [topLevel, ...parentOptions(tree)];
       draw();
     })
     .catch((error: unknown) => {

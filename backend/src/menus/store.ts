@@ -122,7 +122,7 @@ export function loadSections(ctx: AppContext, menuId: Id): MenuSection[] {
 export function loadMenu(ctx: AppContext, id: Id): Menu {
   const row = ctx.db
     .prepare(
-      `SELECT mn.id, mn.name, mn.date, mn.is_live, mn.token, mn.live_since, mn.created_at, mn.updated_at,
+      `SELECT mn.id, mn.name, mn.date, mn.is_live, mn.token, mn.live_since, mn.ended_at, mn.created_at, mn.updated_at,
          m.id AS member_id, m.name AS member_name, ${IMAGE_COLUMNS}
        FROM menus mn
        LEFT JOIN members m ON m.id = mn.created_by
@@ -143,6 +143,7 @@ export function loadMenu(ctx: AppContext, id: Id): Menu {
     date: str(row, 'date'),
     live,
     link: live && token !== null && liveSince !== null ? { path: menuPath(ctx, token), liveSince } : null,
+    endedAt: strOrNull(row, 'ended_at'),
     sections: loadSections(ctx, id),
     createdBy:
       row.member_id === null
@@ -161,7 +162,7 @@ export function listMenus(ctx: AppContext, page: number, pageSize: number): Page
   const totalRow = ctx.db.prepare('SELECT count(*) AS n FROM menus').get();
   const items = ctx.db
     .prepare(
-      `SELECT mn.id, mn.name, mn.date, mn.is_live, mn.updated_at,
+      `SELECT mn.id, mn.name, mn.date, mn.is_live, mn.ended_at, mn.updated_at,
          (SELECT count(*) FROM menu_items it JOIN menu_sections s ON s.id = it.section_id WHERE s.menu_id = mn.id) AS item_count
        FROM menus mn
        ORDER BY mn.is_live DESC, mn.date DESC, mn.id DESC
@@ -173,6 +174,7 @@ export function listMenus(ctx: AppContext, page: number, pageSize: number): Page
       name: str(row, 'name'),
       date: str(row, 'date'),
       live: num(row, 'is_live') === 1,
+      endedAt: strOrNull(row, 'ended_at'),
       itemCount: num(row, 'item_count'),
       updatedAt: str(row, 'updated_at'),
     }));
@@ -315,22 +317,25 @@ export function makeMenuLive(ctx: AppContext, id: Id): void {
     const now = iso(ctx);
     ctx.db
       .prepare(
-        'UPDATE menus SET is_live = 0, token = NULL, live_since = NULL, updated_at = ? WHERE is_live = 1 AND id <> ?',
+        'UPDATE menus SET is_live = 0, token = NULL, live_since = NULL, ended_at = ?, updated_at = ? WHERE is_live = 1 AND id <> ?',
       )
-      .run(now, id);
+      .run(now, now, id);
     ctx.db
-      .prepare('UPDATE menus SET is_live = 1, token = ?, live_since = ?, updated_at = ? WHERE id = ? AND is_live = 0')
+      .prepare(
+        'UPDATE menus SET is_live = 1, token = ?, live_since = ?, ended_at = NULL, updated_at = ? WHERE id = ? AND is_live = 0',
+      )
       .run(generateMenuToken(), now, now, id);
   });
 }
 
 export function endMenu(ctx: AppContext, id: Id): void {
   menuExists(ctx.db, id);
+  const now = iso(ctx);
   ctx.db
     .prepare(
-      'UPDATE menus SET is_live = 0, token = NULL, live_since = NULL, updated_at = ? WHERE id = ? AND is_live = 1',
+      'UPDATE menus SET is_live = 0, token = NULL, live_since = NULL, ended_at = ?, updated_at = ? WHERE id = ? AND is_live = 1',
     )
-    .run(iso(ctx), id);
+    .run(now, now, id);
 }
 
 export function rotateMenuLink(ctx: AppContext, id: Id): void {

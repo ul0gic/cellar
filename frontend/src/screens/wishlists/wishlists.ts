@@ -2,21 +2,15 @@ import type { FieldError, Wishlist, WishlistItem } from '@cellar/contract';
 import type { LightElements } from '@lightstart/light/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
+import { eventText } from '../../app/events.ts';
+import { type LoadState, watch } from '../../app/load.ts';
+import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import {
-  actionFailed,
-  attempt,
-  eventText,
-  fieldError,
-  type LoadState,
-  sheet,
-  waiting,
-  watch,
-} from '../shelf/parts/kit.ts';
+import { attempt, fieldError, sheet, waiting } from '../shelf/parts/kit.ts';
 import './wishlists.css';
 
 type Dropdown = LightElements['lc-dropdown'];

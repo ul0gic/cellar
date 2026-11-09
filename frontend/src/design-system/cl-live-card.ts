@@ -1,5 +1,6 @@
 import { defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
+import { navigation } from '@lightstart/light/navigation';
 import { text } from '../text/index.ts';
 import './cl-live-card.css';
 
@@ -18,7 +19,7 @@ export const clLiveCard = defineComponent({
         <span part="cl-live-card-kicker">${text('live.onTv')}</span>
         <span part="cl-live-card-name">${this.name}</span>
       </span>
-      <lc-button part="cl-live-card-open" variant="quiet" href=${this.href}>
+      <lc-button part="cl-live-card-open" variant="quiet" href=${navigation.href(this.href)}>
         <lc-icon name="tv" aria-hidden="true"></lc-icon>
         ${this.drinks === 1 ? text('live.drink') : text('live.drinks', { count: this.drinks })}
       </lc-button>
