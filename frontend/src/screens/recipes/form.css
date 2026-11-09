@@ -139,12 +139,6 @@
   font-weight: var(--weight-bold);
 }
 
-.cl-field-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: var(--text-sm);
-}
-
 .cl-form-footer {
   display: flex;
   flex-wrap: wrap;

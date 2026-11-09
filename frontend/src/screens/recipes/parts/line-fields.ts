@@ -217,12 +217,12 @@ function ingredientPick(
       label=${label}
       placeholder=${value?.name ?? text('recipes.findIngredient')}
       .query=${''}
+      error-message=${error === '' ? nothing : error}
       @search-input=${(event: Event) =>
         void search(event).catch((failure: unknown) => actionFailed(failure, () => undefined))}
       @search-select=${select}
     ></lc-search>
     ${value === null ? nothing : html`<p class="cl-pick-chosen">${value.name}</p>`}
-    ${error === '' ? nothing : html`<p class="cl-field-error" role="alert">${error}</p>`}
   </div>`;
 }
 
