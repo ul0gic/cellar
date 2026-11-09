@@ -64,6 +64,7 @@ export {
 } from './settings.ts';
 export { ImageFetchInputSchema, ImagePurposeSchema, ImageUploadPartsSchema } from './media.ts';
 export {
+  LineCoverageSchema,
   LineStatusSchema,
   LineSubstituteSchema,
   RecipeFacetsSchema,

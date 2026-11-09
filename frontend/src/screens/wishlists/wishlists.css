@@ -1,0 +1,17 @@
+.cl-wishlists-who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cl-wishlists-empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--text-muted);
+}
+
+.cl-wishlists-link {
+  display: inline-flex;
+  vertical-align: middle;
+  color: var(--accent-text);
+}

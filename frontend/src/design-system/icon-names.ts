@@ -58,6 +58,14 @@ export const DESIGN_ICONS = [
   'moon',
 ] as const;
 
-export const LIGHT_COMPONENT_ICONS = ['menu', 'circle-check', 'circle-x', 'bell', 'zoom-in', 'zoom-out'] as const;
+export const LIGHT_COMPONENT_ICONS = [
+  'menu',
+  'circle-check',
+  'circle-x',
+  'bell',
+  'zoom-in',
+  'zoom-out',
+  'cloud-upload',
+] as const;
 
 export const ICON_NAMES: readonly string[] = [...DESIGN_ICONS, ...LIGHT_COMPONENT_ICONS];

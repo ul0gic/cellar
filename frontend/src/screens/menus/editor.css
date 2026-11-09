@@ -1,0 +1,207 @@
+.cl-menu-edit {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.cl-menu-main {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.cl-menu-section-name {
+  width: 100%;
+  min-height: var(--target);
+  padding: 0;
+  border: 0;
+  border-bottom: var(--hairline) dashed var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-menu-section-name:focus-visible {
+  outline: var(--focus-ring) solid var(--focus);
+  outline-offset: var(--nudge-lg);
+}
+
+.cl-menu-main .form-field.cl-menu-sections {
+  grid-column: 1 / -1;
+}
+
+.cl-menu-sections .lc-form-list {
+  padding: 0;
+  border: 0;
+}
+
+.cl-menu-sections .lc-form-list > legend {
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.cl-menu-sections .lc-form-list-actions lc-button[size="xs"] {
+  --lc-button-height: var(--target);
+  --lc-button-font-size: var(--text-md);
+}
+
+.cl-menu-sections .lc-form-list .lc-form-list .lc-form-list-actions {
+  flex-direction: column;
+}
+
+.cl-menu-sections > .lc-form-list > .lc-form-list-item {
+  padding: var(--space-4) 0;
+  border-top: var(--hairline) solid var(--line);
+}
+
+.cl-menu-sections .lc-form-list .lc-form-list .lc-form-list-item {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.cl-menu-item {
+  display: grid;
+  grid-template-columns: var(--thumb) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.cl-menu-item-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.cl-menu-item-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cl-menu-item-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-weight: var(--weight-bold);
+}
+
+.cl-menu-item-kind {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+
+.cl-menu-item-note lc-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cl-menu-item-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.cl-menu-item-hidden {
+  --lc-tag-color: var(--danger);
+}
+
+.cl-menu-save {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cl-menu-panel {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.cl-menu-panel-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-menu-panel-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-menu-tier {
+  color: var(--text);
+}
+
+.cl-menu-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cl-menu-link-code {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+  user-select: all;
+  word-break: break-all;
+}
+
+.cl-menu-qr {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.cl-menu-qr cl-qr {
+  flex: none;
+}
+
+.cl-menu-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cl-menu-end {
+  --lc-button-quiet-color: var(--danger);
+}
+
+.cl-menu-make-live {
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .cl-menu-edit {
+    grid-template-columns: minmax(0, 1fr) var(--aside-w);
+    align-items: start;
+  }
+
+  .cl-menu-panel {
+    position: sticky;
+    top: calc(var(--topbar-h) + var(--space-4));
+  }
+}

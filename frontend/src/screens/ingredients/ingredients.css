@@ -1,0 +1,131 @@
+.cl-ingr-tree {
+  border-top: var(--hairline) solid var(--line);
+}
+
+.cl-ingr-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min);
+  padding: var(--space-2) 0 var(--space-2) calc(var(--space-5) * min(var(--depth, 0), 6));
+  border-bottom: var(--hairline) solid var(--line);
+}
+
+.cl-ingr-root {
+  padding-top: var(--space-4);
+}
+
+.cl-ingr-root-name {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-ingr-pager {
+  display: flex;
+  justify-content: center;
+}
+
+.cl-ingr-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.cl-ingr-hero-art {
+  width: var(--ingredient-hero);
+  height: var(--ingredient-hero);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.cl-ingr-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+.cl-ingr-crumbs li + li::before {
+  content: "›";
+  margin-inline-end: var(--space-1);
+}
+
+.cl-ingr-crumbs a {
+  color: var(--accent-text);
+}
+
+.cl-ingr-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-ingr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cl-ingr-because {
+  max-width: var(--reading-max);
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.cl-ingr-description {
+  max-width: var(--reading-max);
+  margin: 0;
+  white-space: pre-line;
+}
+
+.cl-ingr-note {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+
+.cl-ingr-note + .cl-ingr-note {
+  border-top: var(--hairline) solid var(--line);
+}
+
+.cl-ingr-note-text {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.cl-ingr-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.cl-ingr-part {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.cl-ingr-photo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cl-ingr-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  color: var(--accent-text);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}

@@ -1,0 +1,129 @@
+.cl-recipes {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cl-recipes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+
+.cl-recipes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cl-recipes-chips {
+  display: flex;
+  gap: var(--space-2);
+  margin-inline: calc(-1 * var(--gutter));
+  padding: 0 var(--gutter);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cl-recipes-chip-count {
+  color: inherit;
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-recipes-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cl-recipes-body {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.cl-recipes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-recipes-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-recipes-thumb {
+  display: block;
+  width: var(--thumb);
+  height: var(--thumb);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.cl-recipes-name {
+  display: block;
+  color: inherit;
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+}
+
+.cl-recipes-muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-recipes-fav {
+  display: inline-grid;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--accent-text);
+
+  &[aria-pressed="true"] {
+    color: var(--glow);
+  }
+}
+
+.cl-recipes-pager {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+}
+
+.cl-filter-abv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+@media (min-width: 640px) {
+  .cl-recipes-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .cl-recipes-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-5);
+  }
+
+  .cl-recipes-chips {
+    flex-wrap: wrap;
+    margin-inline: 0;
+    padding: 0;
+  }
+}

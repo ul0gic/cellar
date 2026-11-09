@@ -63,7 +63,6 @@ export const routes: readonly RouteDef[] = [
   page('/calculators/:id', 'calculators/calculator', 'title.calculator'),
   page('/menus', 'menus/list', 'nav.menus'),
   page('/menus/:id', 'menus/editor', 'title.menu'),
-  page('/search', 'search/dialog', 'nav.search'),
   page('/stats', 'stats/stats', 'nav.stats'),
   page('/import', 'import-export/index', 'nav.importExport'),
   page('/import/:tab', 'import-export/index', 'nav.importExport'),

@@ -10,6 +10,7 @@ import {
   buyNext,
   missingIngredientIds,
   onHandIngredientIds,
+  recipeLineCoverage,
   recipeLineStatuses,
   recipeOutcomes,
 } from './satisfaction.ts';
@@ -131,6 +132,10 @@ function check(fixture: Fixture): string[] {
   );
   const outcomes = recipeOutcomes(db);
   const filtered = recipeOutcomes(db, { recipeIds: fixture.recipes.map((recipe) => recipe.id) });
+  const coverage = recipeLineCoverage(
+    db,
+    fixture.recipes.map((recipe) => recipe.id),
+  );
   compare('recipeOutcomes size', outcomes.size, fixture.recipes.length);
   for (const recipe of fixture.recipes) {
     const outcome = outcomes.get(recipe.id);
@@ -155,6 +160,20 @@ function check(fixture: Fixture): string[] {
         l.expected,
       );
     }
+    const optionalLines = new Set(recipe.lines.filter((l) => l.optional).map((l) => l.id));
+    const recipeCoverage = coverage.get(recipe.id) ?? [];
+    compare(
+      `recipe ${recipe.id} coverage agrees with recipeLineStatuses`,
+      recipeCoverage,
+      statuses
+        .filter((row) => !optionalLines.has(row.lineId))
+        .map((row) => (row.status === 'on_hand' || row.status === 'missing' ? row.status : 'covered')),
+    );
+    compare(
+      `recipe ${recipe.id} coverage missing agrees with missingCount`,
+      recipeCoverage.filter((c) => c === 'missing').length,
+      outcome?.missingCount,
+    );
     const missingLines = recipe.lines.filter((l) => !l.optional && l.expected.status === 'missing');
     compare(
       `recipe ${recipe.id} missing lines agree with missingCount`,

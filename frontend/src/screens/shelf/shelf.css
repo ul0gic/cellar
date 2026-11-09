@@ -1,0 +1,79 @@
+.cl-shelf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--chip-sm);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.cl-shelf-faint {
+  color: var(--text-faint);
+}
+
+.cl-shelf-check,
+.cl-shelf-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: var(--target);
+  min-height: var(--target);
+  cursor: pointer;
+}
+
+.cl-shelf-table {
+  width: 100%;
+}
+
+.cl-shelf-pager {
+  display: flex;
+  justify-content: center;
+}
+
+.cl-shelf-bulk {
+  position: sticky;
+  bottom: var(--space-3);
+  z-index: var(--z-bar);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.cl-shell-tabs .cl-shelf-bulk {
+  bottom: calc(var(--tabbar-h) + var(--space-3) + env(safe-area-inset-bottom, 0px));
+}
+
+.cl-shelf-bulk-count {
+  flex: 1;
+  font-weight: var(--weight-bold);
+}
+
+.cl-shelf-danger {
+  color: var(--danger);
+}
+
+.cl-shelf-new-ingredient {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.cl-shelf-tools lc-segmented {
+  flex: none;
+}
+
+.cl-shelf-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-5);
+}

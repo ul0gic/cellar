@@ -1,0 +1,18 @@
+export const strings = {
+  'history.figureLabel': 'bottles finished this year',
+  'history.figureOne': 'bottle finished this year',
+  'history.since': '{count} since we started counting',
+  'history.sinceOne': '1 since we started counting',
+  'history.line': '{ingredient}. Opened {opened}, finished {finished}, {days}.',
+  'history.lineNoOpen': '{ingredient}. Finished {finished}.',
+  'history.price': 'Paid {price}.',
+  'history.dayOne': '1 day',
+  'history.dayMany': '{count} days',
+  'history.reopen': 'Reopen',
+  'history.reopenLabel': 'Reopen {name}',
+  'history.reopened': '{name} is back on the shelf, open.',
+  'history.emptyTitle': 'No finished bottles yet',
+  'history.emptyBody': 'When you finish a bottle it lands here with the day you opened it and the day it ran out.',
+  'history.pages': 'History pages',
+  'history.year': 'Finished in {year}',
+} as const;

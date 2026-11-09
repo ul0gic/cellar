@@ -1,0 +1,119 @@
+.cl-party {
+  display: grid;
+  gap: var(--space-5);
+  margin-inline: auto;
+}
+
+.cl-party-head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.cl-party-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-party-muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-party-panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.cl-party-each {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-party-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cl-party-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cl-party-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-xl);
+}
+
+.cl-party-table-wrap {
+  overflow-x: auto;
+}
+
+.cl-party-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  & th,
+  & td {
+    padding: var(--space-2) var(--space-2) var(--space-2) 0;
+    border-bottom: var(--hairline) solid var(--line);
+    text-align: start;
+  }
+
+  & thead th {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    border-bottom: var(--ring) solid var(--line-strong);
+  }
+
+  & tbody th {
+    font-weight: var(--weight-bold);
+  }
+
+  & .cl-num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cl-party-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+
+  &.is-missing {
+    color: var(--danger);
+  }
+}
+
+.cl-party-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+@media (max-width: 1023px) {
+  .cl-party-title {
+    display: none;
+  }
+}

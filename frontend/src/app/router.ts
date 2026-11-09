@@ -56,6 +56,7 @@ let ignoreNextPop = false;
 let stopRestore: (() => void) | null = null;
 const blockers = new Set<Blocker>();
 const routeListeners = new Set<() => void>();
+const mountListeners = new Set<() => void>();
 const queryListeners = new Set<() => void>();
 const scrollPositions = new Map<string, number>();
 
@@ -349,6 +350,7 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
   }
   current = match;
   setScreenTitle(titleOf(match, module));
+  notify(mountListeners);
   target.replaceChildren(module === null ? document.createElement('div') : module.screen(context(match)));
   notify(routeListeners);
   notify(queryListeners);
@@ -527,6 +529,12 @@ export const router = {
     routeListeners.add(fn);
     return () => {
       routeListeners.delete(fn);
+    };
+  },
+  beforeMount(fn: () => void): () => void {
+    mountListeners.add(fn);
+    return () => {
+      mountListeners.delete(fn);
     };
   },
 };

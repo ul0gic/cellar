@@ -66,6 +66,10 @@ let started = false;
 let shoppingCount = 0;
 let menuLive = false;
 let overlay: HTMLElement | null = null;
+let searchDialog: HTMLElement | null = null;
+let searchOpener: Element | null = null;
+let pendingAuth: AuthCode | null = null;
+const SIGN_IN_PATHS: readonly string[] = ['/setup', '/who', '/login', '/login/new-password'];
 let countsWatched = false;
 
 function appPath(): string {
@@ -149,7 +153,7 @@ function topBar(session: SessionPerson): TemplateResult {
       <lc-dropdown class="cl-more-menu" aria-label=${text('nav.moreMenu')} .items=${moreItems}></lc-dropdown>
     </nav>
     <div slot="end" class="cl-topbar-end">
-      <button type="button" class="cl-searchbox" @click=${() => navigate('/search')}>
+      <button type="button" class="cl-searchbox" @click=${() => void openSearch()}>
         <lc-icon name="search" aria-hidden="true"></lc-icon>
         <span>${text('nav.searchBox')}</span>
         <kbd>${keycap()}</kbd>
@@ -222,7 +226,11 @@ function chrome(): TemplateResult {
   if (kind === 'bare') {
     return html`<main class="cl-bare">${outlet}</main>`;
   }
-  return html`<lc-app-shell layout="mobile" class="cl-shell cl-shell-tabs">
+  return html`<lc-app-shell
+    layout="mobile"
+    class="cl-shell cl-shell-tabs"
+    .headerHeight=${appBar.hidden === true ? '0px' : 'var(--appbar-h)'}
+  >
     ${appBar.hidden === true ? nothing : compactAppBar(document.title.replace(/ \| .*$/, ''))}
     <main>${page}</main>
     ${tabBar()}
@@ -238,6 +246,7 @@ function draw(): void {
       ${chrome()}
       <lc-toast position=${wide.matches ? 'bottom-right' : 'bottom-center'}></lc-toast>
       ${overlay ?? nothing}
+      ${searchDialog ?? nothing}
     `,
     root,
   );
@@ -258,26 +267,32 @@ function hideLaunch(): void {
 
 function redirectFor(code: AuthCode): void {
   const route = router.current();
-  const here = `${appPath()}${location.search}`;
-  const next = here === '/' ? '' : `next=${encodeURIComponent(here)}`;
+  if (route === null) {
+    pendingAuth = code;
+    return;
+  }
+  const path = appPath();
+  const here = `${path}${location.search}`;
+  const next = here === '/' ? '' : `?next=${encodeURIComponent(here)}`;
+  const leaving = route.def.access !== 'public' && !SIGN_IN_PATHS.includes(path);
   switch (code) {
     case 'setup_required':
-      if (route?.def.path !== '/setup') {
+      if (path !== '/setup') {
         navigate('/setup', { replace: true });
       }
       return;
     case 'login_required':
-      if (route?.def.access !== 'public') {
-        navigate(`/login${next === '' ? '' : `?${next}`}`, { replace: true });
+      if (leaving) {
+        navigate(`/login${next}`, { replace: true });
       }
       return;
     case 'profile_required':
-      if (route?.def.access !== 'public') {
-        navigate(`/who${next === '' ? '' : `?${next}`}`, { replace: true });
+      if (leaving) {
+        navigate(`/who${next}`, { replace: true });
       }
       return;
     case 'password_change_required':
-      if (route?.def.path !== '/login/new-password') {
+      if (path !== '/login/new-password') {
         navigate('/login/new-password', { replace: true });
       }
       return;
@@ -316,6 +331,35 @@ async function showOverlay(key: 'launch/offline' | 'launch/splash' | 'launch/los
   draw();
 }
 
+async function openSearch(): Promise<void> {
+  if (searchDialog !== null || overlay !== null || person.current() === null) {
+    return;
+  }
+  const opener = document.activeElement;
+  const module = await loadScreen('search/dialog');
+  if (module === null || searchDialog !== null) {
+    return;
+  }
+  const dialog = module.screen({ params: {}, query, navigate, person });
+  dialog.addEventListener('cl-dismiss', closeSearch);
+  searchOpener = opener;
+  searchDialog = dialog;
+  draw();
+}
+
+function closeSearch(): void {
+  if (searchDialog === null) {
+    return;
+  }
+  const opener = searchOpener;
+  searchDialog = null;
+  searchOpener = null;
+  draw();
+  if (opener instanceof HTMLElement && opener.isConnected) {
+    opener.focus();
+  }
+}
+
 async function refreshed(): Promise<boolean> {
   try {
     await person.refresh();
@@ -345,8 +389,9 @@ async function recover(): Promise<void> {
 export async function startShell(target: HTMLElement): Promise<void> {
   root = target;
   wide.addEventListener('change', draw);
-  router.subscribe(() => {
+  router.beforeMount(() => {
     appBar = {};
+    closeSearch();
   });
   router.subscribe(draw);
   onAuthProblem(redirectFor);
@@ -371,12 +416,17 @@ export async function startShell(target: HTMLElement): Promise<void> {
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && person.current() !== null) {
       event.preventDefault();
-      navigate('/search');
+      void openSearch();
     }
   });
   const firstPaint = router.subscribe(() => {
     firstPaint();
     requestAnimationFrame(hideLaunch);
+    const code = pendingAuth;
+    pendingAuth = null;
+    if (code !== null) {
+      redirectFor(code);
+    }
   });
   draw();
   if (await refreshed()) {

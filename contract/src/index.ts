@@ -101,6 +101,7 @@ export type {
 } from './settings.ts';
 export type { ImageFetchInput, ImageUploadParts } from './media.ts';
 export type {
+  LineCoverage,
   LineStatus,
   LineSubstitute,
   Recipe,

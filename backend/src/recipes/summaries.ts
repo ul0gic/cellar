@@ -1,7 +1,7 @@
 import { type AbvLine, computeAbv, type Id, type RecipeSummary, recipeVolumeMl, type TaxonRef } from '@cellar/contract';
 import type { AppContext } from '../core/context.ts';
 import type { Database } from '../core/db.ts';
-import { recipeOutcomes } from '../shelf/satisfaction.ts';
+import { recipeLineCoverage, recipeOutcomes } from '../shelf/satisfaction.ts';
 import { imageColumns, imageRefOrNull, num, numOrNull, text, textOrNull, imageRefsOf } from './rows.ts';
 import { householdRating } from './visibility.ts';
 
@@ -58,6 +58,33 @@ function tagsByRecipe(db: Database, ids: readonly Id[]): Map<Id, TaxonRef[]> {
   return byRecipe;
 }
 
+function ingredientNamesByRecipe(db: Database, ids: readonly Id[]): Map<Id, string[]> {
+  const rows = db
+    .prepare(
+      `SELECT l.recipe_id, i.name FROM recipe_lines l JOIN ingredients i ON i.id = l.ingredient_id
+       WHERE l.recipe_id IN (SELECT value FROM json_each(?)) ORDER BY l.recipe_id, l.position`,
+    )
+    .all(JSON.stringify(ids));
+  const byRecipe = new Map<Id, string[]>();
+  for (const row of rows) {
+    const recipeId = num(row, 'recipe_id');
+    const names = byRecipe.get(recipeId) ?? [];
+    names.push(text(row, 'name'));
+    byRecipe.set(recipeId, names);
+  }
+  return byRecipe;
+}
+
+function madeCountsByRecipe(db: Database, ids: readonly Id[], viewer: Id): Map<Id, number> {
+  const rows = db
+    .prepare(
+      `SELECT recipe_id, COUNT(*) AS made FROM made_it
+       WHERE member_id = ? AND recipe_id IN (SELECT value FROM json_each(?)) GROUP BY recipe_id`,
+    )
+    .all(viewer, JSON.stringify(ids));
+  return new Map(rows.map((row) => [num(row, 'recipe_id'), num(row, 'made')]));
+}
+
 export function recipeSummaries(ctx: AppContext, ids: readonly Id[], viewer: Id): RecipeSummary[] {
   if (ids.length === 0) {
     return [];
@@ -80,6 +107,9 @@ export function recipeSummaries(ctx: AppContext, ids: readonly Id[], viewer: Id)
   const outcomes = recipeOutcomes(db, { recipeIds: [...ids] });
   const tags = tagsByRecipe(db, ids);
   const figures = abvFigures(db, ids);
+  const coverage = recipeLineCoverage(db, [...ids]);
+  const ingredients = ingredientNamesByRecipe(db, ids);
+  const madeCounts = madeCountsByRecipe(db, ids, viewer);
   return ids.flatMap((id): RecipeSummary[] => {
     const row = byId.get(id);
     const outcome = outcomes.get(id);
@@ -96,10 +126,12 @@ export function recipeSummaries(ctx: AppContext, ids: readonly Id[], viewer: Id)
         provenance: textOrNull(row, 'catalog_key') === null ? 'household' : 'catalog',
         glass: glassId === null ? null : { id: glassId, name: text(row, 'glass_name') },
         tags: tags.get(id) ?? [],
+        ingredients: ingredients.get(id) ?? [],
         abv: figures.get(id)?.abv ?? null,
         canMake: outcome.canMake,
         missingCount: outcome.missingCount,
-        mine: { favorite: num(row, 'favorite') === 1, rating: rating.mine },
+        coverage: coverage.get(id) ?? [],
+        mine: { favorite: num(row, 'favorite') === 1, rating: rating.mine, madeCount: madeCounts.get(id) ?? 0 },
         household: { rating: rating.household },
         createdAt: text(row, 'created_at'),
       },

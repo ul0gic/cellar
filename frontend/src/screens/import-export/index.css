@@ -1,0 +1,170 @@
+.cl-import {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cl-import-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-import-step,
+.cl-import-recipes,
+.cl-import-web,
+.cl-import-export,
+.cl-import-form {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+}
+
+.cl-import-form {
+  padding-top: 0;
+}
+
+.cl-import-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-import-subheading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-xl);
+}
+
+.cl-import-text {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.cl-import-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.cl-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cl-import-fields {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cl-import-field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cl-import-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.cl-import-table {
+  min-width: 0;
+}
+
+.cl-import-tally {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.cl-import-tally-cell {
+  display: grid;
+  justify-items: start;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.cl-import-tally-cell b {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-import-tally-cell span {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-import-tally-cell.is-bad b {
+  color: var(--danger);
+}
+
+.cl-import-result-list,
+.cl-import-export-list {
+  display: grid;
+  margin: 0;
+  padding: 0 var(--space-4);
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.cl-import-result {
+  display: grid;
+  gap: var(--space-1);
+  min-height: var(--row-min);
+  padding: var(--space-3) 0;
+}
+
+.cl-import-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-height: var(--row-min);
+  padding: var(--space-3) 0;
+}
+
+.cl-import-result + .cl-import-result,
+.cl-import-export-row + .cl-import-export-row {
+  border-top: var(--hairline) solid var(--line);
+}
+
+.cl-import-result-name,
+.cl-import-export-name {
+  font-weight: var(--weight-bold);
+}
+
+.cl-import-result-text,
+.cl-import-export-hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-import-result.is-bad .cl-import-result-text {
+  color: var(--danger);
+}
+
+.cl-import-export-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .cl-import-title {
+    font-size: var(--text-4xl);
+  }
+
+  .cl-import-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,111 @@
+.cl-collections,
+.cl-collection {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cl-collections-head,
+.cl-collection-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cl-collections-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-collections-muted {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-collections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-collection-card {
+  display: grid;
+  gap: var(--space-1);
+  height: 100%;
+  padding-bottom: var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: inherit;
+  text-decoration: none;
+}
+
+.cl-collection-media {
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+
+  & lc-image,
+  & cl-plate {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.cl-collection-name {
+  padding: 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-collection-meta {
+  padding: 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cl-collection-actions,
+.cl-collection-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cl-collection-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-collection-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+@media (min-width: 1024px) {
+  .cl-collections-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-5);
+  }
+}
+
+@media (max-width: 1023px) {
+  .cl-collections-head .cl-collections-title {
+    display: none;
+  }
+}

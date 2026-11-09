@@ -1,0 +1,28 @@
+export const strings = {
+  'setup.account.title': 'Set up your bar',
+  'setup.account.lead': "You'll be the owner. You can add the rest of the family next.",
+  'setup.name': 'Your name',
+  'setup.nameMissing': 'Enter your name.',
+  'setup.password': 'Password',
+  'setup.passwordHint': 'At least 10 characters.',
+  'setup.weak': 'Use at least 10 characters. A short sentence works well.',
+  'setup.continue': 'Continue',
+  'setup.options.title': 'How the family gets in',
+  'setup.options.lead': 'You can change both later in Settings.',
+  'setup.requireLogin': 'Require login',
+  'setup.requireLoginBody':
+    "Everyone signs in with a password. Turn it off and the app opens on a Who's here? picker instead.",
+  'setup.loadCatalog': 'Load the recipe book',
+  'setup.loadCatalogBody':
+    '663 cocktails, 296 ingredients and their photos. Ships with Cellar, nothing is downloaded. About 49 MB.',
+  'setup.open': 'Open the bar',
+  'setup.ownerFailed': "Cellar couldn't create the owner",
+  'setup.ownerFailedBody': '{reason} Nothing was saved.',
+  'setup.loading.title': 'Stocking the shelves',
+  'setup.loading.lead': 'Loading the recipe book. This takes under a minute.',
+  'setup.loading.label': 'Loading the recipe book',
+  'setup.failed.title': 'The bar is open',
+  'setup.failed.banner': "The recipe book didn't load",
+  'setup.failedUnknown': "The recipe book didn't load. Everything else is ready; load it later from Settings, Catalog.",
+  'setup.failed.continue': 'Continue to Cellar',
+} as const;

@@ -36,6 +36,9 @@ export const LineStatusSchema = z
   .meta({ id: 'LineStatus' });
 export type LineStatus = z.infer<typeof LineStatusSchema>;
 
+export const LineCoverageSchema = z.enum(['on_hand', 'covered', 'missing']).meta({ id: 'LineCoverage' });
+export type LineCoverage = z.infer<typeof LineCoverageSchema>;
+
 export const LineSubstituteSchema = z
   .object({
     ingredient: IngredientRefSchema,
@@ -109,10 +112,12 @@ export const RecipeSummarySchema = z
     provenance: ProvenanceSchema,
     glass: TaxonRefSchema.nullable(),
     tags: z.array(TaxonRefSchema),
+    ingredients: z.array(z.string()).max(LIMITS.recipeLines.max),
     abv: z.number().nullable(),
     canMake: z.boolean(),
     missingCount: z.int().min(0),
-    mine: z.object({ favorite: z.boolean(), rating: RatingSchema.nullable() }),
+    coverage: z.array(LineCoverageSchema),
+    mine: z.object({ favorite: z.boolean(), rating: RatingSchema.nullable(), madeCount: z.int().min(0) }),
     household: z.object({ rating: HouseholdRatingSchema }),
     createdAt: IsoDateTimeSchema,
   })

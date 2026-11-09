@@ -1,8 +1,11 @@
 import { defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
+import type { LightElements } from '@lightstart/light/components/elements.js';
 import T from '@lightstart/light/types';
 import { text } from '../text/index.ts';
 import './cl-typed-confirm.css';
+
+type Modal = LightElements['lc-modal'];
 
 let instances = 0;
 
@@ -35,7 +38,7 @@ export const clTypedConfirm = defineComponent({
   },
   _close(confirmed: boolean) {
     this._confirmed = confirmed;
-    this.open = false;
+    this.querySelector<Modal>('lc-modal')?.close();
   },
   render() {
     const fieldId = `${this._id}-field`;
@@ -45,7 +48,10 @@ export const clTypedConfirm = defineComponent({
         ?open=${this.open}
         size="sm"
         .closeOnBackdropClick=${false}
-        @modal-close=${() => this.$emit('answer', { confirmed: this._confirmed })}
+        @modal-close=${() => {
+          this.open = false;
+          this.$emit('answer', { confirmed: this._confirmed });
+        }}
       >
         <h2 slot="header" part="cl-typed-confirm-title">${this.heading}</h2>
         <p part="cl-typed-confirm-message">${this.message}</p>

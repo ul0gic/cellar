@@ -1,0 +1,155 @@
+.cl-printed {
+  box-sizing: border-box;
+  width: min(100%, var(--print-w));
+  min-height: var(--print-h);
+  margin: var(--space-5) auto;
+  padding: var(--print-pad-y) var(--print-pad-x);
+  background: var(--print-paper);
+  color: var(--print-ink);
+  font-size: var(--print-body);
+  box-shadow: var(--shadow-card);
+}
+
+.cl-print-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--gutter) 0;
+}
+
+.cl-print-title {
+  margin: 0 0 6pt;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--print-title);
+  line-height: 1.1;
+}
+
+.cl-print-sub {
+  margin: 0 0 18pt;
+  color: var(--print-muted);
+}
+
+.cl-print-heading {
+  margin: 14pt 0 6pt;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--print-heading);
+}
+
+.cl-print-body {
+  display: grid;
+  grid-template-columns: 1fr var(--print-image-w);
+  gap: 24pt;
+}
+
+.cl-print-figure {
+  width: var(--print-image-w);
+  height: var(--print-image-h);
+  overflow: hidden;
+
+  & img,
+  & cl-plate {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.cl-print-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  & th,
+  & td {
+    padding: 4pt 6pt 4pt 0;
+    border-bottom: var(--print-hairline) solid var(--print-rule);
+    text-align: start;
+    vertical-align: baseline;
+  }
+
+  & .cl-print-amt {
+    width: var(--print-amt-w);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+
+  & .cl-print-unit {
+    width: var(--print-unit-w);
+  }
+
+  & .cl-print-num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cl-print-muted {
+  color: var(--print-muted);
+}
+
+.cl-print-steps {
+  margin: 0;
+  padding-inline-start: 16pt;
+}
+
+.cl-print-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2pt 12pt;
+  margin: 0;
+
+  & dt {
+    color: var(--print-muted);
+  }
+
+  & dd {
+    margin: 0;
+  }
+}
+
+.cl-print-items {
+  display: grid;
+  gap: 8pt;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  & li {
+    display: grid;
+    grid-template-columns: var(--print-box) 1fr;
+    gap: 2pt 10pt;
+    align-items: baseline;
+  }
+}
+
+.cl-print-box {
+  width: var(--print-box);
+  height: var(--print-box);
+  border: 1pt solid var(--print-ink);
+}
+
+.cl-print-foot {
+  margin-top: 24pt;
+  color: var(--print-muted);
+  font-size: var(--print-small);
+}
+
+@page {
+  margin: 0.5in;
+}
+
+@media print {
+  .cl-print-toolbar {
+    display: none;
+  }
+
+  .cl-printed {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}

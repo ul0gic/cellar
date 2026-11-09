@@ -1,5 +1,5 @@
-import type { Id, LineStatus, SubstitutionEffect } from '@cellar/contract';
-import { LineStatusSchema, SubstitutionEffectSchema } from '@cellar/contract/schemas';
+import type { Id, LineCoverage, LineStatus, SubstitutionEffect } from '@cellar/contract';
+import { LineCoverageSchema, LineStatusSchema, SubstitutionEffectSchema } from '@cellar/contract/schemas';
 // biome-ignore lint/correctness/noUnresolvedImports: Biome 2.6.6's Node built-in module list lacks node:sqlite
 import type { StatementSync } from 'node:sqlite';
 import type { Database } from '../core/db.ts';
@@ -127,6 +127,18 @@ SELECT
 FROM candidate c LEFT JOIN household_substitutions h ON h.id = c.c4
 ORDER BY c.position`,
 
+  lineCoverage: `WITH RECURSIVE ${SATISFACTION}
+SELECT
+  l.recipe_id AS recipeId,
+  CASE
+    WHEN l.ingredient_id IN (SELECT id FROM direct) THEN 'on_hand'
+    WHEN ${LINE_MISSING} THEN 'missing'
+    ELSE 'covered'
+  END AS coverage
+FROM recipe_lines l
+WHERE l.recipe_id IN (SELECT value FROM json_each(?)) AND l.optional = 0
+ORDER BY l.recipe_id, l.position`,
+
   missingIngredients: `WITH RECURSIVE ${SATISFACTION}
 SELECT l.ingredient_id AS ingredientId
 FROM recipe_lines l
@@ -225,6 +237,17 @@ export function recipeLineStatuses(db: Database, recipeId: Id): LineStatusRow[] 
       satisfiedBy: row.satisfiedBy === null ? null : Number(row.satisfiedBy),
       substitutionEffect: substitutionEffect.parse(row.substitutionEffect),
     }));
+}
+
+export function recipeLineCoverage(db: Database, recipeIds: Id[]): Map<Id, LineCoverage[]> {
+  const coverage = new Map<Id, LineCoverage[]>();
+  for (const row of prepared(db, SQL.lineCoverage).iterate(JSON.stringify(recipeIds))) {
+    const recipeId = Number(row.recipeId);
+    const lines = coverage.get(recipeId) ?? [];
+    lines.push(LineCoverageSchema.parse(row.coverage));
+    coverage.set(recipeId, lines);
+  }
+  return coverage;
 }
 
 export function buyNext(db: Database, limit: number): BuyNextRow[] {

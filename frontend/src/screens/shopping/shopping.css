@@ -1,0 +1,19 @@
+.cl-shopping-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--target);
+  min-height: var(--target);
+}
+
+.cl-shopping-name {
+  font-weight: var(--weight-medium);
+}
+
+.cl-shopping-count {
+  flex: none;
+}
+
+.cl-shopping-add {
+  max-width: 28rem;
+}

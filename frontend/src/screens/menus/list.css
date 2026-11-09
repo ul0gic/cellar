@@ -1,0 +1,72 @@
+.cl-menus {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cl-menus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cl-menus-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-menus-heading {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+
+.cl-menus-list {
+  display: grid;
+  margin: 0;
+  padding: 0 var(--space-4);
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hairline) var(--line);
+}
+
+.cl-menus-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-min-lg);
+  padding: var(--space-2) 0;
+}
+
+.cl-menus-row + .cl-menus-row {
+  border-top: var(--hairline) solid var(--line);
+}
+
+.cl-menus-row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cl-menus-row-name {
+  font-weight: var(--weight-bold);
+}
+
+.cl-menus-row-line {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+@media (min-width: 1024px) {
+  .cl-menus-title {
+    font-size: var(--text-4xl);
+  }
+}

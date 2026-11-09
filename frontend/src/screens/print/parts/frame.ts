@@ -1,0 +1,24 @@
+import { html, type TemplateResult } from '@lightstart/light/html';
+import { href } from '../../../app/router.ts';
+import { formatDate } from '../../../text/format.ts';
+import { text } from '../../../text/index.ts';
+import './print.css';
+
+export function todayIso(): string {
+  return new Date().toISOString();
+}
+
+export function toolbar(back: string): TemplateResult {
+  return html`<div class="cl-print-toolbar">
+    <lc-button variant="quiet" href=${href(back)}>
+      <lc-icon name="chevron-left" aria-hidden="true"></lc-icon>${text('action.back')}
+    </lc-button>
+    <lc-button variant="primary" @click=${() => window.print()}>
+      <lc-icon name="printer" aria-hidden="true"></lc-icon>${text('print.print')}
+    </lc-button>
+  </div>`;
+}
+
+export function printedOn(): TemplateResult {
+  return html`<p class="cl-print-foot">${text('print.printedOn', { date: formatDate(todayIso()) })}</p>`;
+}
