@@ -50,6 +50,8 @@ export const cellarTheme: ThemeData = {
   },
   lc: {
     textarea: { 'border-radius': 'var(--radius-md)' },
+    input: { 'hover-border-color': 'var(--text-muted)' },
+    tabs: { 'hover-color': 'var(--text)', 'hover-background': 'var(--accent-wash)' },
     'empty-state': {
       'title-size': 'var(--text-2xl)',
       'title-font-weight': '400',

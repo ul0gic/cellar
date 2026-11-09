@@ -24,7 +24,7 @@ export interface DisplayMenu {
 
 export interface DisplayPageContext {
   readonly assetBase: string;
-  readonly appVersion: string;
+  readonly assetVersion: string;
   readonly menuPath: string;
   readonly stateVersion: string;
   readonly today: Date;
@@ -156,7 +156,7 @@ export function renderDisplayPage(menu: DisplayMenu, context: DisplayPageContext
   return renderDocument({
     title: menu.name,
     assetBase: context.assetBase,
-    version: context.appVersion,
+    version: context.assetVersion,
     refresh: true,
     bodyAttributes: ` class="${layout.tier}" data-version="${escapeHtml(context.stateVersion)}"`,
     main: `${head}${renderBody(menu, visible, layout, context.menuPath)}${stale}`,

@@ -4,7 +4,7 @@ a.name {
 }
 a.name:focus,
 .back:focus {
-  outline: var(--tv-frame) solid var(--tv-bulb);
+  outline: var(--tv-frame) solid var(--tv-red);
   outline-offset: var(--tv-rule-inset);
 }
 a.name:focus:not(:focus-visible),
@@ -28,18 +28,18 @@ body.recipe {
   margin: var(--tv-rule-inset) 0 var(--tv-item-gap);
 }
 .back {
-  color: var(--tv-brass);
+  color: var(--tv-red);
   font-size: var(--tv-date);
   text-decoration: none;
 }
 .hero {
   display: block;
-  width: auto;
+  width: 100%;
   height: auto;
-  max-width: 100%;
-  max-height: 50vh;
-  margin: 0 0 var(--tv-item-gap);
-  border: var(--tv-frame) solid var(--tv-brass);
+  max-height: 64vh;
+  object-fit: cover;
+  border-radius: var(--tv-radius);
+  box-shadow: var(--tv-shadow-x) var(--tv-shadow-y) var(--tv-shadow-blur) var(--tv-shadow-spread) var(--tv-shadow-ink);
 }
 .lines,
 .steps {
@@ -58,7 +58,7 @@ body.recipe {
 }
 .amt {
   font-family: var(--tv-display);
-  color: var(--tv-brass);
+  color: var(--tv-red);
 }
 .meta {
   color: var(--tv-muted);
@@ -73,10 +73,15 @@ body.recipe {
   .back {
     font-size: 17px;
   }
+  .recipe-body {
+    display: block;
+  }
+  .recipe-photo {
+    width: auto;
+    margin: 0 0 16px;
+  }
   .hero {
-    width: 100%;
     max-height: none;
-    border-width: 2px;
   }
   .lines,
   .steps,

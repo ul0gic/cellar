@@ -78,11 +78,12 @@ function displayModel(ctx: AppContext, live: LiveMenu): DisplayModel {
 
 export function register(app: FastifyInstance, ctx: AppContext): void {
   const assetBase = `${ctx.settings.basePath}/m/_`;
+  const assetVersion = registerDisplayAssets(app);
   const pageSize = (requested: number | undefined) => requested ?? LIMITS.pageSize.default;
 
   const notLive = (reply: FastifyReply): string => {
     reply.code(404);
-    return renderNotLivePage(assetBase, ctx.version);
+    return renderNotLivePage(assetBase, assetVersion);
   };
 
   const showDisplay = (token: string, reply: FastifyReply): string => {
@@ -94,7 +95,7 @@ export function register(app: FastifyInstance, ctx: AppContext): void {
     const model = displayModel(ctx, live);
     return renderDisplayPage(model.menu, {
       assetBase,
-      appVersion: ctx.version,
+      assetVersion,
       menuPath: menuPath(ctx, live.token),
       stateVersion: displayVersion(live.id, live.updatedAt, live.token, model.shownItemIds),
       today: ctx.now(),
@@ -113,7 +114,7 @@ export function register(app: FastifyInstance, ctx: AppContext): void {
     }
     return renderRecipePage(recipe, {
       assetBase,
-      appVersion: ctx.version,
+      assetVersion,
       menuPath: menuPath(ctx, live.token),
       displayUnit: displayUnit(ctx.db),
     });
@@ -161,6 +162,5 @@ export function register(app: FastifyInstance, ctx: AppContext): void {
   route(app, 'showMenuRecipe', async (request, reply) =>
     gzipped(request, reply, showRecipe(request.params.token, request.params.recipeId, reply)),
   );
-  registerDisplayAssets(app, ctx.version);
   route(app, 'getMenuDisplayState', async (request, reply) => displayState(request.params.token, reply));
 }

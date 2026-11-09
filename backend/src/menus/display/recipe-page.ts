@@ -17,7 +17,7 @@ export interface DisplayRecipe {
 
 export interface RecipePageContext {
   readonly assetBase: string;
-  readonly appVersion: string;
+  readonly assetVersion: string;
   readonly menuPath: string;
   readonly displayUnit: PreferredUnit;
 }
@@ -54,18 +54,21 @@ export function renderRecipePage(recipe: DisplayRecipe, context: RecipePageConte
     .filter((step) => step !== '')
     .map((step) => `<li>${escapeHtml(step)}</li>`)
     .join('');
-  const main = [
-    `<a class="back" href="${context.menuPath}">Back to the menu</a>`,
-    `<h1>${escapeHtml(recipe.name)}</h1>`,
-    renderHero(recipe),
+  const hero = renderHero(recipe);
+  const text = [
     `<ul class="lines">${recipe.lines.map((line) => renderLine(line, context.displayUnit)).join('')}</ul>`,
     steps === '' ? '' : `<ol class="steps">${steps}</ol>`,
     renderMeta(recipe),
   ].join('');
+  const main = [
+    `<a class="back" href="${context.menuPath}">Back to the menu</a>`,
+    `<h1>${escapeHtml(recipe.name)}</h1>`,
+    `<div class="recipe-body">${hero === '' ? '' : `<div class="recipe-photo">${hero}</div>`}<div class="recipe-text">${text}</div></div>`,
+  ].join('');
   return renderDocument({
     title: recipe.name,
     assetBase: context.assetBase,
-    version: context.appVersion,
+    version: context.assetVersion,
     refresh: false,
     bodyAttributes: ' class="recipe"',
     main,
