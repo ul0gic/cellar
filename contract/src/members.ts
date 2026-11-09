@@ -8,7 +8,6 @@ import {
   idParams,
   PreferredUnitSchema,
   RoleSchema,
-  ThemeChoiceSchema,
   VisibilitySchema,
 } from './primitives.ts';
 import type { RouteSchema } from './routes.ts';
@@ -49,7 +48,6 @@ export const ProfilePatchSchema = z
     name: memberName.optional(),
     avatarImageId: IdSchema.nullable().optional(),
     unit: PreferredUnitSchema.optional(),
-    theme: ThemeChoiceSchema.optional(),
     defaultVisibility: VisibilitySchema.optional(),
     showPrices: z.boolean().optional(),
   })

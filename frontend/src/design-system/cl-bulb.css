@@ -1,30 +1,24 @@
 :where(.cl-bulb, cl-bulb) {
   --cl-bulb-size: var(--bulb);
   --cl-bulb-glow: var(--glow);
-  --cl-bulb-core: var(--glow-core);
-  --cl-bulb-halo: var(--glow-shadow);
   --cl-bulb-off: var(--bulb-off);
   display: inline-flex;
   flex: none;
 
   &[size="mini"] {
     --cl-bulb-size: var(--bulb-mini);
-    --cl-bulb-halo: var(--glow-shadow-sm);
   }
 
   &[size="live"] {
     --cl-bulb-size: var(--live-bulb);
-    --cl-bulb-halo: var(--glow-shadow-dot);
   }
 
   &[size="dot"] {
     --cl-bulb-size: var(--dot);
-    --cl-bulb-halo: var(--glow-shadow-dot);
   }
 
   &[on-photo] {
     --cl-bulb-glow: var(--on-photo-glow);
-    --cl-bulb-core: var(--on-photo-glow-core);
     --cl-bulb-off: var(--on-photo-bulb-off);
   }
 
@@ -37,13 +31,13 @@
   }
 
   &[status="on"] [part~="cl-bulb-lamp"] {
-    background: radial-gradient(circle at 40% 35%, var(--cl-bulb-core), var(--cl-bulb-glow) 62%);
-    box-shadow: var(--cl-bulb-halo);
+    background: var(--cl-bulb-glow);
   }
 
   &[status="via"] [part~="cl-bulb-lamp"] {
-    background: linear-gradient(90deg, var(--cl-bulb-glow) 50%, transparent 50%);
-    box-shadow: inset 0 0 0 var(--ring) var(--cl-bulb-glow);
+    box-shadow:
+      inset calc(var(--cl-bulb-size) / 2) 0 0 0 var(--cl-bulb-glow),
+      inset 0 0 0 var(--ring) var(--cl-bulb-glow);
   }
 
   &[status="off"] [part~="cl-bulb-lamp"] {
@@ -54,16 +48,9 @@
     border: var(--ring) dashed var(--cl-bulb-off);
   }
 
-  &[flicker] [part~="cl-bulb-lamp"] {
-    animation: cl-flicker var(--dur-flicker) ease-in-out 3;
-  }
-
   @media (prefers-reduced-motion: reduce) {
     & [part~="cl-bulb-lamp"] {
       transition: none;
-    }
-    &[flicker] [part~="cl-bulb-lamp"] {
-      animation: none;
     }
   }
 

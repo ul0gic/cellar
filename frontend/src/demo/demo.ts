@@ -1,4 +1,3 @@
-import { colorScheme } from '@lightstart/light/theme/color-scheme.js';
 import { html, render } from '@lightstart/light/html';
 import { screen as notFound } from '../screens/launch/not-found.ts';
 import { screen as offline } from '../screens/launch/offline.ts';
@@ -67,8 +66,6 @@ function ctxScreen(make: typeof notFound): HTMLElement {
 
 export function mountDemo(root: HTMLElement): void {
   document.getElementById('launch')?.remove();
-  const dark = new URLSearchParams(location.search).get('theme') === 'dark';
-  colorScheme.choose(dark);
   let rating = 3.5;
 
   const draw = (): void => {
@@ -84,7 +81,7 @@ export function mountDemo(root: HTMLElement): void {
               <cl-bulb status="via" label="Covered another way"></cl-bulb>
               <cl-bulb status="off" label="Missing"></cl-bulb>
               <cl-bulb status="optional" label="Optional"></cl-bulb>
-              <cl-bulb status="on" size="live" flicker label="Live"></cl-bulb>
+              <cl-bulb status="on" size="live" label="Live"></cl-bulb>
               <cl-bulb status="on" size="dot" label="A menu is live"></cl-bulb>
             </div>
           </section>

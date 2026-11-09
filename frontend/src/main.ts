@@ -1,11 +1,11 @@
 import 'virtual:cellar-light.css';
-import { applyCellarTheme } from './app/theme.ts';
+import { configureTheme } from '@lightstart/light/theme';
 import { defineCompositions } from './design-system/compositions.ts';
 import { defineLightComponents } from './design-system/light-components.ts';
 import './design-system/light.css';
 import { startShell } from './app/shell.ts';
 
-applyCellarTheme();
+configureTheme({ requestFont: () => undefined });
 defineLightComponents();
 defineCompositions();
 

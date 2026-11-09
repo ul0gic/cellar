@@ -4,7 +4,7 @@
   place-items: center;
   overflow: hidden;
   border-radius: inherit;
-  background: radial-gradient(ellipse 80% 70% at 50% 35%, var(--plate-bg), var(--plate-bg-2));
+  background: var(--plate-bg);
   color: var(--plate-line);
 
   &::before {
@@ -27,7 +27,6 @@
     margin-left: calc(var(--dot) / -2);
     border-radius: 50%;
     background: var(--glow);
-    box-shadow: var(--glow-shadow-plate);
   }
 
   & [part~="cl-plate-art"] {

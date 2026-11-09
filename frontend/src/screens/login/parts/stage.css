@@ -72,5 +72,5 @@
 
 .cl-stepdots i.is-on {
   background: var(--glow);
-  box-shadow: var(--glow-shadow-dot);
+  box-shadow: none;
 }

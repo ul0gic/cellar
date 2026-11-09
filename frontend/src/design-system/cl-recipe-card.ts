@@ -69,7 +69,7 @@ export const clRecipeCard = defineComponent({
         </span>
         <span part="cl-recipe-card-body">
           <span part="cl-recipe-card-name">${this.name}</span>
-          ${this.summary ? html`<span part="cl-recipe-card-summary">${this.summary}</span>` : ''}
+          <span part="cl-recipe-card-summary">${this.summary}</span>
           <span part="cl-recipe-card-meta">
             ${ratingInline(this.rating)}
             ${made ? html`<span part="cl-recipe-card-made">${made}</span>` : ''}

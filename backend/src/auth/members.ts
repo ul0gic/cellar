@@ -185,7 +185,7 @@ export function registerMembers(app: FastifyInstance, ctx: AppContext): void {
       const name = patch.name ?? member.name;
       ctx.db
         .prepare(
-          `UPDATE members SET name = ?, folded_name = ?, avatar_image_id = ?, preferred_unit = ?, theme = ?,
+          `UPDATE members SET name = ?, folded_name = ?, avatar_image_id = ?, preferred_unit = ?,
              default_visibility = ?, show_prices = ?, updated_at = ? WHERE id = ?`,
         )
         .run(
@@ -193,7 +193,6 @@ export function registerMembers(app: FastifyInstance, ctx: AppContext): void {
           foldName(name),
           patch.avatarImageId === undefined ? member.avatarImageId : patch.avatarImageId,
           patch.unit ?? member.unit,
-          patch.theme ?? member.theme,
           patch.defaultVisibility ?? member.defaultVisibility,
           (patch.showPrices ?? member.showPrices) ? 1 : 0,
           ctx.now().toISOString(),

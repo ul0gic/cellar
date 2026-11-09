@@ -45,9 +45,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ${profiles.map(
             (
               profile,
-              index,
             ) => html`<lc-tile class="cl-who-tile" interactive label=${profile.name} @select=${() => void choose(profile)}>
-              <lc-avatar slot="media" size="xl" seed=${String(index + 1)} name=${profile.name} src=${profile.avatar?.url ?? nothing}></lc-avatar>
+              <lc-avatar shape="rounded" slot="media" size="xl" name=${profile.name} src=${profile.avatar?.url ?? nothing}></lc-avatar>
             </lc-tile>`,
           )}
         </div>

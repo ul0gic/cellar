@@ -208,7 +208,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return html`<section class="cl-kit-section" aria-labelledby=${headingId}>
       <div class="cl-kit-section-head">
         <div class="cl-wishlists-who">
-          <lc-avatar size="sm" name=${list.person.name} src=${list.person.avatar?.url ?? nothing}></lc-avatar>
+          <lc-avatar shape="rounded" size="sm" name=${list.person.name} src=${list.person.avatar?.url ?? nothing}></lc-avatar>
           <h2 class="cl-kit-section-title" id=${headingId}>${list.mine ? text('wishlists.yours') : list.person.name}</h2>
         </div>
         ${

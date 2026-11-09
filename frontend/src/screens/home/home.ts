@@ -11,7 +11,7 @@ import type { ScreenContext, SessionPerson } from '../../app/types.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
 import { takeFirstArrival } from '../../design-system/motion.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
-import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
+import { thumbHashDataUrl, thumbHashLuma } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
@@ -20,6 +20,11 @@ import { loadFailed } from '../settings/parts/load-failed.ts';
 import './home.css';
 
 const COLLAGE_SIZE = 3;
+const HERO_POOL = 24;
+const HERO_MAX_LUMA = 0.6;
+const MORNING_FROM_HOUR = 5;
+const AFTERNOON_FROM_HOUR = 12;
+const EVENING_FROM_HOUR = 17;
 const SHELF_STRIP_SIZE = 8;
 const SHOPPING_PREVIEW_SIZE = 3;
 const EMPTY_PLATES = ['coupe', 'rocks', 'highball'] as const;
@@ -30,7 +35,7 @@ function collage(recipes: readonly RecipeSummary[], settle: boolean): TemplateRe
       ? EMPTY_PLATES.map((kind) => html`<div><cl-plate kind=${kind} name=${text('app.name')}></cl-plate></div>`)
       : recipes.slice(0, COLLAGE_SIZE).map(
           (recipe) =>
-            html`<div>
+            html`<a href=${href(`/recipes/${recipe.id}`)}>
               ${
                 recipe.image === null
                   ? html`<cl-plate kind=${plateForGlass(recipe.glass?.name ?? null)} name=${recipe.name}></cl-plate>`
@@ -40,9 +45,28 @@ function collage(recipes: readonly RecipeSummary[], settle: boolean): TemplateRe
                       placeholder=${recipe.image.thumbhash === null ? nothing : thumbHashDataUrl(recipe.image.thumbhash)}
                     ></lc-image>`
               }
-            </div>`,
+            </a>`,
         );
   return html`<div class=${settle ? 'cl-collage cl-settle' : 'cl-collage'}>${tiles}</div>`;
+}
+
+function greeting(name: string, now: Date): string {
+  const hour = now.getHours();
+  if (hour >= MORNING_FROM_HOUR && hour < AFTERNOON_FROM_HOUR) {
+    return text('home.greetMorning', { name });
+  }
+  if (hour >= AFTERNOON_FROM_HOUR && hour < EVENING_FROM_HOUR) {
+    return text('home.greetAfternoon', { name });
+  }
+  return text('home.greetEvening', { name });
+}
+
+function darkPhotosFirst(recipes: readonly RecipeSummary[]): RecipeSummary[] {
+  const dark = (recipe: RecipeSummary): boolean => {
+    const hash = recipe.image?.thumbhash ?? null;
+    return hash !== null && thumbHashLuma(hash) <= HERO_MAX_LUMA;
+  };
+  return [...recipes.filter(dark), ...recipes.filter((recipe) => !dark(recipe))];
 }
 
 function bottleTile(bottle: BottleSummary): TemplateResult {
@@ -74,12 +98,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
   const home = resourceFor('getHome', {}, { tags: ['shelf', 'recipes', 'shopping', 'menus', 'wishlists'] });
   const top = resourceFor(
     'listRecipes',
-    { query: { status: 'can_make', sort: 'rating', order: 'desc', pageSize: COLLAGE_SIZE } },
+    { query: { status: 'can_make', sort: 'rating', order: 'desc', pageSize: HERO_POOL } },
     { tags: ['recipes', 'shelf'] },
   );
   const anyRecipes = resourceFor(
     'listRecipes',
-    { query: { sort: 'rating', order: 'desc', pageSize: COLLAGE_SIZE } },
+    { query: { sort: 'rating', order: 'desc', pageSize: HERO_POOL } },
     { tags: ['recipes'] },
   );
   const bottles = resourceFor(
@@ -153,7 +177,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const hero = (data: Home, session: SessionPerson, empty: boolean): TemplateResult => {
     const recipes = top.peek()?.items ?? [];
-    const pictured = recipes.length > 0 ? recipes : (anyRecipes.peek()?.items ?? []);
+    const pictured = darkPhotosFirst(recipes.length > 0 ? recipes : (anyRecipes.peek()?.items ?? []));
     const missingOne = top.peek()?.facets.missing1 ?? 0;
     const catalogMissing = !session.household.catalogLoaded;
     return html`<div class="cl-hero">
@@ -164,13 +188,14 @@ export function screen(ctx: ScreenContext): HTMLElement {
           <a class="cl-hero-button" href=${href('/search')} aria-label=${text('nav.search')}
             ><lc-icon name="search" aria-hidden="true"></lc-icon
           ></a>
-          <a class="cl-hero-avatar" href=${href('/settings/profile')}
-            ><lc-avatar name=${session.person.name} src=${session.person.avatar?.url ?? nothing}></lc-avatar
+          <a class="cl-hero-account" href=${href('/settings/profile')}
+            ><lc-icon name="user-round" aria-hidden="true"></lc-icon
             ><span class="cl-vh">${text('nav.account', { name: session.person.name })}</span></a
           >
         </span>
       </div>
       <div class="cl-canmake">
+        <p class="cl-canmake-greeting">${greeting(session.person.name, new Date())}</p>
         ${
           empty
             ? html`<cl-figure
@@ -261,9 +286,15 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return html`<section class="cl-home-section cl-rise" style=${`--i:${index}`} aria-labelledby="home-shopping">
       <div class="cl-section-head">
         <h2 class="cl-section-title" id="home-shopping">${text('nav.shoppingList')}</h2>
-        ${items.length > 0 ? html`<span class="cl-section-count">${text('home.items', { count: formatNumber(items.length) })}</span>` : nothing}
+        ${
+          items.length === 0
+            ? nothing
+            : html`<span class="cl-section-count"
+                >${items.length === 1 ? text('home.itemsOne') : text('home.items', { count: formatNumber(items.length) })}</span
+              >`
+        }
       </div>
-      <div class="cl-home-panel">
+      <div class=${items.length === 0 ? 'cl-home-panel cl-home-panel-empty' : 'cl-home-panel'}>
         ${
           items.length === 0
             ? html`<p class="cl-home-muted">${text('home.listEmpty')}</p>`

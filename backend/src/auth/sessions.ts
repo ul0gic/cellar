@@ -27,7 +27,6 @@ export interface MemberRow {
   readonly mustChangePassword: boolean;
   readonly avatarImageId: Id | null;
   readonly unit: Profile['unit'];
-  readonly theme: Profile['theme'];
   readonly defaultVisibility: Profile['defaultVisibility'];
   readonly showPrices: boolean;
   readonly createdAt: string;
@@ -42,7 +41,6 @@ function memberRowOf(row: Readonly<Record<string, unknown>>): MemberRow {
     must_change_password,
     avatar_image_id,
     preferred_unit,
-    theme,
     default_visibility,
     show_prices,
     created_at,
@@ -54,7 +52,6 @@ function memberRowOf(row: Readonly<Record<string, unknown>>): MemberRow {
     (password_hash !== null && typeof password_hash !== 'string') ||
     (avatar_image_id !== null && typeof avatar_image_id !== 'number') ||
     (preferred_unit !== 'oz' && preferred_unit !== 'ml') ||
-    (theme !== 'system' && theme !== 'light' && theme !== 'dark') ||
     (default_visibility !== 'household' && default_visibility !== 'private') ||
     typeof created_at !== 'string'
   ) {
@@ -68,7 +65,6 @@ function memberRowOf(row: Readonly<Record<string, unknown>>): MemberRow {
     mustChangePassword: must_change_password === 1,
     avatarImageId: avatar_image_id,
     unit: preferred_unit,
-    theme,
     defaultVisibility: default_visibility,
     showPrices: show_prices === 1,
     createdAt: created_at,
@@ -104,7 +100,6 @@ export function profileOf(ctx: AppContext, member: MemberRow): Profile {
     role: member.role,
     avatar: avatarOf(ctx, member),
     unit: member.unit,
-    theme: member.theme,
     defaultVisibility: member.defaultVisibility,
     showPrices: member.showPrices,
     mustChangePassword: member.mustChangePassword,

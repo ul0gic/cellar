@@ -30,7 +30,6 @@
     line-height: var(--leading-figure);
     letter-spacing: var(--tracking-figure);
     font-variant-numeric: tabular-nums lining-nums;
-    text-shadow: var(--figure-glow);
   }
 
   & [part~="cl-figure-labels"] {

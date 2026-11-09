@@ -1,5 +1,8 @@
 export const strings = {
   'home.canMakeLabel': 'drinks we can make tonight',
+  'home.greetMorning': 'Good morning, {name}',
+  'home.greetAfternoon': 'Good afternoon, {name}',
+  'home.greetEvening': 'Good evening, {name}',
   'home.missingOne': '{count} more are one bottle away',
   'home.emptyLabel': "recipes in the book. Tell Cellar what's on the shelf and it works out what you can make.",
   'home.noCatalogLabel': 'recipes in the book. Load the shipped catalog or add your own.',
@@ -9,6 +12,7 @@ export const strings = {
   'home.addToList': 'Add {name} to the shopping list',
   'home.onList': 'On the list',
   'home.items': '{count} items',
+  'home.itemsOne': '1 item',
   'home.addedBy': 'Added by {name}',
   'home.listEmpty': 'Nothing on the list. Add missing ingredients from any recipe.',
   'home.openList': 'Open the list',

@@ -23,9 +23,6 @@ export type Provenance = z.infer<typeof ProvenanceSchema>;
 export const PreferredUnitSchema = z.enum(['oz', 'ml']).meta({ id: 'PreferredUnit' });
 export type PreferredUnit = z.infer<typeof PreferredUnitSchema>;
 
-export const ThemeChoiceSchema = z.enum(['system', 'light', 'dark']).meta({ id: 'ThemeChoice' });
-export type ThemeChoice = z.infer<typeof ThemeChoiceSchema>;
-
 export const SortOrderSchema = z.enum(['asc', 'desc']).meta({ id: 'SortOrder' });
 export type SortOrder = z.infer<typeof SortOrderSchema>;
 

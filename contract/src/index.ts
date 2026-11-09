@@ -37,7 +37,6 @@ export type {
   Target,
   TargetType,
   TaxonRef,
-  ThemeChoice,
   Visibility,
 } from './primitives.ts';
 export type { FieldError, Problem } from './problem.ts';

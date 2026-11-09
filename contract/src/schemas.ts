@@ -20,7 +20,6 @@ export {
   TargetSchema,
   TargetTypeSchema,
   TaxonRefSchema,
-  ThemeChoiceSchema,
   VisibilitySchema,
 } from './primitives.ts';
 export { FieldErrorSchema, ProblemSchema } from './problem.ts';

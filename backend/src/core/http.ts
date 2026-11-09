@@ -10,7 +10,6 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 import { register as registerSystem } from '../system/routes.ts';
 import { createAccessPreHandler } from './access.ts';
 import type { AppContext } from './context.ts';
-import { hashCredential, SESSION_COOKIE, sessionTheme } from './credentials.ts';
 import { domains } from './domains.ts';
 import { hidePrices } from './hide-prices.ts';
 import { createErrorHandler, problem } from './problems.ts';
@@ -35,7 +34,6 @@ const PUBLIC_ROOT_FILES = [
   'icon-192.png',
   'icon-512.png',
   'apple-touch-icon.png',
-  'prepaint.js',
 ] as const;
 const PUBLIC_ROOT_MAX_AGE = '1h';
 
@@ -51,24 +49,21 @@ function pathOf(url: string): string {
 }
 
 interface IndexTemplate {
-  render(basePath: string, scheme: 'light' | 'dark' | null): string;
+  render(basePath: string): string;
 }
 
 function loadIndexTemplate(): IndexTemplate {
   const html = readFileSync(`${FRONTEND_DIST}index.html`, 'utf8');
-  const scheme = /<html\b[^>]*?\sdata-color-scheme="([^"]*)"/.exec(html);
   const base = /<base\s+href="([^"]*)"/.exec(html);
-  if (scheme === null || base === null || base.index < scheme.index) {
-    throw new Error('frontend/dist/index.html lacks the <html data-color-scheme> or <base href> placeholder');
+  if (base === null) {
+    throw new Error('frontend/dist/index.html lacks the <base href> placeholder');
   }
-  const schemeValue = scheme.index + scheme[0].length - 1 - scheme[1].length;
   const baseValue = base.index + base[0].length - 1 - base[1].length;
-  const beforeScheme = html.slice(0, schemeValue);
-  const schemeToBase = html.slice(schemeValue + scheme[1].length, baseValue);
+  const beforeBase = html.slice(0, baseValue);
   const afterBase = html.slice(baseValue + base[1].length);
   return {
-    render(basePath, colorScheme) {
-      return `${beforeScheme}${colorScheme ?? ''}${schemeToBase}${basePath}/${afterBase}`;
+    render(basePath) {
+      return `${beforeBase}${basePath}/${afterBase}`;
     },
   };
 }
@@ -156,14 +151,11 @@ export function buildHttp(ctx: AppContext): FastifyInstance {
           reply.callNotFound();
           return reply;
         }
-        const cookie = request.cookies[SESSION_COOKIE];
-        const scheme =
-          cookie === undefined || cookie === '' ? null : sessionTheme(ctx.db, hashCredential(cookie), ctx.now());
         return reply
           .headers(SECURITY_HEADERS)
           .header('Cache-Control', 'no-cache')
           .type('text/html; charset=utf-8')
-          .send(index.render(basePath, scheme));
+          .send(index.render(basePath));
       };
       for (const file of PUBLIC_ROOT_FILES) {
         scope.get(`/${file}`, (_request, reply) =>

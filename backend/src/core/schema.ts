@@ -37,7 +37,6 @@ CREATE TABLE members (
   must_change_password INTEGER NOT NULL DEFAULT 0,
   avatar_image_id INTEGER NULL REFERENCES images(id) ON DELETE SET NULL,
   preferred_unit TEXT NOT NULL DEFAULT 'oz',
-  theme TEXT NOT NULL DEFAULT 'system',
   default_visibility TEXT NOT NULL DEFAULT 'household',
   show_prices INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,

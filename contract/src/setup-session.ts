@@ -7,7 +7,6 @@ import {
   MemberRefSchema,
   PreferredUnitSchema,
   RoleSchema,
-  ThemeChoiceSchema,
   VisibilitySchema,
 } from './primitives.ts';
 import type { RouteSchema } from './routes.ts';
@@ -21,7 +20,6 @@ export const ProfileSchema = z
     role: RoleSchema,
     avatar: ImageRefSchema.nullable(),
     unit: PreferredUnitSchema,
-    theme: ThemeChoiceSchema,
     defaultVisibility: VisibilitySchema,
     showPrices: z.boolean(),
     mustChangePassword: z.boolean(),

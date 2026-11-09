@@ -10,7 +10,6 @@ import { hold, resourceFor } from './resources.ts';
 import { FALLBACK_PATH, href, navigate, query, router } from './router.ts';
 import { routes } from './routes.ts';
 import { loadScreen } from './screens.ts';
-import { chooseTheme } from './theme.ts';
 import type { SessionPerson } from './types.ts';
 import './shell.css';
 
@@ -160,10 +159,10 @@ function topBar(session: SessionPerson): TemplateResult {
       </button>
       <button
         type="button"
-        class="cl-avatar-button"
+        class="cl-account-button"
         aria-haspopup="menu"
         @click=${(event: MouseEvent) => openDropdown(event, '.cl-account-menu')}
-      ><lc-avatar name=${session.person.name} src=${session.person.avatar?.url ?? nothing}></lc-avatar><span class="cl-vh">${text('nav.account', { name: session.person.name })}</span></button>
+      ><lc-icon name="user-round" aria-hidden="true"></lc-icon><span class="cl-vh">${text('nav.account', { name: session.person.name })}</span></button>
       <lc-dropdown class="cl-account-menu" .items=${accountItems}></lc-dropdown>
     </div>
   `;
@@ -219,7 +218,7 @@ function chrome(): TemplateResult {
   }
   if (wide.matches) {
     return html`<lc-app-shell layout="desktop" class="cl-shell">
-      <lc-navbar slot="navbar" class="cl-topbar">${topBar(session)}</lc-navbar>
+      <lc-navbar slot="navbar">${topBar(session)}</lc-navbar>
       <main>${page}</main>
     </lc-app-shell>`;
   }
@@ -388,18 +387,26 @@ async function recover(): Promise<void> {
   draw();
 }
 
+function blurForMenu(event: Event, open: boolean): void {
+  if (event.target instanceof Element && event.target.matches('.cl-more-menu, .cl-account-menu')) {
+    root?.classList.toggle('cl-menu-open', open);
+  }
+}
+
 export async function startShell(target: HTMLElement): Promise<void> {
   root = target;
+  target.addEventListener('popover-open', (event) => blurForMenu(event, true));
+  target.addEventListener('popover-close', (event) => blurForMenu(event, false));
   wide.addEventListener('change', draw);
   router.beforeMount(() => {
     appBar = {};
+    root?.classList.remove('cl-menu-open');
     closeSearch();
   });
   router.subscribe(draw);
   onAuthProblem(redirectFor);
   person.subscribe((session) => {
     if (session !== null) {
-      chooseTheme(session.person.theme);
       if (!countsWatched) {
         countsWatched = true;
         watchCounts();

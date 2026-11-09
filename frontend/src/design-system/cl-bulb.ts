@@ -17,7 +17,6 @@ export const clBulb = defineComponent({
     size: LINE,
     label: '',
     onPhoto: false,
-    flicker: false,
   },
   render() {
     return html`<span

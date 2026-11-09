@@ -14,7 +14,7 @@ export const clLiveCard = defineComponent({
   },
   render() {
     return html`
-      <cl-bulb size="live" status="on" flicker></cl-bulb>
+      <cl-bulb size="live" status="on"></cl-bulb>
       <span part="cl-live-card-meta">
         <span part="cl-live-card-kicker">${text('live.onTv')}</span>
         <span part="cl-live-card-name">${this.name}</span>

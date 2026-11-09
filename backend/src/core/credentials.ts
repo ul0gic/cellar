@@ -99,18 +99,3 @@ export function findToken(db: Database, tokenHash: string, now: Date): MemberAcc
   }
   return memberAccess(row);
 }
-
-export function sessionTheme(db: Database, tokenHash: string, now: Date): 'light' | 'dark' | null {
-  const row = db
-    .prepare(
-      'SELECT m.theme, s.last_used_at FROM sessions s JOIN members m ON m.id = s.member_id WHERE s.token_hash = ?',
-    )
-    .get(tokenHash);
-  if (row === undefined || typeof row.last_used_at !== 'string') {
-    return null;
-  }
-  if (now.getTime() - Date.parse(row.last_used_at) > SESSION_LIFETIME_SECONDS * 1000) {
-    return null;
-  }
-  return row.theme === 'light' || row.theme === 'dark' ? row.theme : null;
-}

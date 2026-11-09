@@ -417,7 +417,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                 ${page.items.map(
                   (note) => html`<li class="cl-note">
                     <div class="cl-note-head">
-                      <lc-avatar size="sm" name=${note.author.name} src=${note.author.avatar?.url ?? nothing}></lc-avatar>
+                      <lc-avatar shape="rounded" size="sm" name=${note.author.name} src=${note.author.avatar?.url ?? nothing}></lc-avatar>
                       <span class="cl-note-who">${note.mine ? text('recipes.you') : note.author.name}</span>
                       <span class="cl-recipe-muted">${formatDate(note.tastedOn, 'this-year')}</span>
                       ${

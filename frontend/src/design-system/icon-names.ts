@@ -54,8 +54,7 @@ export const DESIGN_ICONS = [
   'image',
   'image-plus',
   'notebook-pen',
-  'sun',
-  'moon',
+  'user-round',
 ] as const;
 
 export const LIGHT_COMPONENT_ICONS = [

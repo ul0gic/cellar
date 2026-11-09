@@ -177,8 +177,8 @@ export function screen(ctx: ScreenContext): HTMLElement {
       }
     };
 
-    const row = (member: Member, order: number) => html`<div class="cl-srow">
-      <lc-avatar size="sm" seed=${String(order + 1)} name=${member.name} src=${member.avatar?.url ?? nothing}></lc-avatar>
+    const row = (member: Member) => html`<div class="cl-srow">
+      <lc-avatar shape="rounded" size="sm" name=${member.name} src=${member.avatar?.url ?? nothing}></lc-avatar>
       <span class="cl-srow-text"
         ><b>${member.name}</b
         ><span>${member.role === 'owner' ? text('settings.members.owner') : text('settings.members.member')}</span></span

@@ -10,7 +10,7 @@
     gap: var(--nudge);
     height: var(--stack-h);
     overflow: hidden;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
   }
 
   & [part~="cl-stacked-bar-bar"] > i {

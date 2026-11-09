@@ -1,11 +1,10 @@
-import { LIMITS, type Profile, type ProfilePatch, type ThemeChoice } from '@cellar/contract';
+import { LIMITS, type Profile, type ProfilePatch } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
 import { watch } from '../../app/load.ts';
 import { actionFailed, fieldError, problemText } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
-import { chooseTheme } from '../../app/theme.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import type { ImageUpload } from '../../design-system/cl-image-field.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
@@ -15,10 +14,6 @@ import { segmentedField, switchField } from './parts/fields.ts';
 import { settingsPage } from './parts/frame.ts';
 import { loadFailed } from './parts/load-failed.ts';
 import { openSheet } from './parts/sheet.ts';
-
-function isTheme(value: string): value is ThemeChoice {
-  return value === 'system' || value === 'light' || value === 'dark';
-}
 
 function changePhoto(save: (patch: ProfilePatch) => Promise<void>): void {
   let error = '';
@@ -160,10 +155,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     const view = (profile: Profile) => html`<section class="cl-sgroup" aria-labelledby="settings-profile">
       <h2 id="settings-profile">${text('settings.profile')}</h2>
       <div class="cl-profile-photo">
-        <lc-avatar
-          size="xl"
-          seed=${String((members.peek()?.members.findIndex((member) => member.id === profile.id) ?? 0) + 1)}
-          name=${profile.name} src=${profile.avatar?.url ?? nothing}></lc-avatar>
+        <lc-avatar shape="rounded" size="xl" name=${profile.name} src=${profile.avatar?.url ?? nothing}></lc-avatar>
         <lc-button variant="quiet" @click=${() => changePhoto(save)}>
           <lc-icon name="image" aria-hidden="true"></lc-icon>${text('settings.profile.changePhoto')}
         </lc-button>
@@ -187,21 +179,6 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ],
           profile.unit,
           (unit) => void save({ unit: unit === 'ml' ? 'ml' : 'oz' }),
-        )}
-        ${segmentedField(
-          text('settings.profile.appearance'),
-          [
-            { value: 'light', label: text('settings.profile.light') },
-            { value: 'dark', label: text('settings.profile.dark') },
-            { value: 'system', label: text('settings.profile.system') },
-          ],
-          profile.theme,
-          (theme) => {
-            if (isTheme(theme)) {
-              chooseTheme(theme);
-              void save({ theme });
-            }
-          },
         )}
         ${segmentedField(
           text('settings.profile.visibility'),

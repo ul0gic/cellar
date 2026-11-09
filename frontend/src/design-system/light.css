@@ -34,9 +34,9 @@
 :where(.lc-progress-bar, lc-progress-bar) {
   --lc-progress-bar-height: var(--progress-h);
   --lc-progress-bar-background: var(--surface-sunken);
-  --lc-progress-bar-border-radius: var(--radius-pill);
+  --lc-progress-bar-border-radius: var(--radius-sm);
   --lc-progress-bar-shadow: inset 0 0 0 var(--hairline) var(--line);
-  --lc-progress-bar-fill-background: linear-gradient(90deg, var(--brass), var(--glow));
+  --lc-progress-bar-fill-background: var(--brass);
 
   &[size="sm"] {
     --lc-progress-bar-sm-height: var(--progress-thin);
@@ -44,7 +44,6 @@
 
   .progress-fill {
     border-radius: inherit;
-    box-shadow: var(--glow-shadow-bar);
   }
 
   &[indeterminate] .progress-fill {
@@ -56,9 +55,42 @@
   @media (prefers-reduced-motion: reduce) {
     &[indeterminate] .progress-fill {
       width: 100%;
-      background-image: linear-gradient(90deg, var(--brass), var(--glow));
+      background-image: none;
     }
   }
+}
+
+:where(.lc-segmented, lc-segmented) {
+  --lc-segmented-border-radius: var(--radius-sm);
+  --lc-segmented-track-background: var(--surface-sunken);
+  --lc-segmented-track-shadow: inset 0 0 0 var(--hairline) var(--text-faint);
+}
+
+:where(.lc-number-input, lc-number-input) {
+  --lc-number-input-stepper-button-border-radius: var(--radius-sm);
+}
+
+:where(.lc-switch, lc-switch) {
+  --radius-full: var(--radius-sm);
+  --lc-switch-track-background: var(--surface-sunken);
+  --lc-switch-thumb-background: var(--surface-raised);
+
+  .switch-control {
+    box-shadow: inset 0 0 0 var(--hairline) var(--text-faint);
+  }
+
+  .switch-thumb {
+    box-shadow: inset 0 0 0 var(--hairline) var(--text-faint);
+  }
+
+  &:has(.switch-native:checked) .switch-control {
+    box-shadow: none;
+  }
+}
+
+:where(.lc-tag, lc-tag) {
+  --lc-tag-border-radius: var(--radius-sm);
+  --lc-tag-rounded-border-radius: var(--radius-sm);
 }
 
 :where(.lc-clipboard, lc-clipboard) {
@@ -74,9 +106,9 @@
     --lc-button-background: var(--surface-raised);
     --lc-button-color: var(--accent-text);
     --lc-button-ghost-color: var(--accent-text);
-    --lc-button-border-radius: var(--radius-pill);
+    --lc-button-border-radius: var(--radius-sm);
     box-shadow: inset 0 0 0 var(--hairline) var(--line);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
   }
 
   &[icon-only] .clipboard-button {
@@ -156,7 +188,7 @@
   & [part~="lc-toast-close"] {
     width: var(--target);
     height: var(--target);
-    border-radius: 50%;
+    border-radius: var(--radius-sm);
     --lc-toast-close-hover-background: color-mix(in srgb, var(--background) 16%, transparent);
     --lc-toast-close-hover-color: var(--background);
   }
@@ -253,15 +285,17 @@
 }
 
 :where(.lc-avatar, lc-avatar) {
-  --lc-avatar-color: var(--avatar-ink);
-  --lc-avatar-swatch-0: var(--avatar-1);
-  --lc-avatar-swatch-1: var(--avatar-2);
-  --lc-avatar-swatch-2: var(--avatar-3);
-  --lc-avatar-swatch-3: var(--avatar-4);
-  --lc-avatar-swatch-4: var(--avatar-5);
-  --lc-avatar-swatch-5: var(--avatar-6);
-  --lc-avatar-swatch-6: var(--avatar-1);
-  --lc-avatar-swatch-7: var(--avatar-2);
+  --lc-avatar-border: var(--hairline) solid var(--line-strong);
+  --lc-avatar-shadow: none;
+  --lc-avatar-color: var(--text);
+  --lc-avatar-swatch-0: var(--surface-raised);
+  --lc-avatar-swatch-1: var(--surface-raised);
+  --lc-avatar-swatch-2: var(--surface-raised);
+  --lc-avatar-swatch-3: var(--surface-raised);
+  --lc-avatar-swatch-4: var(--surface-raised);
+  --lc-avatar-swatch-5: var(--surface-raised);
+  --lc-avatar-swatch-6: var(--surface-raised);
+  --lc-avatar-swatch-7: var(--surface-raised);
 }
 
 :where(.lc-alert-dialog, lc-alert-dialog) .alert-dialog-button.confirm:not(.danger) {
