@@ -37,10 +37,60 @@ function decodeEntities(text: string): string {
     .replaceAll('&amp;', '&');
 }
 
+const DECODE_PASSES = 3;
+
+function stripTags(html: string): string {
+  return decodeEntities(
+    html.replace(/<\/?(?:a|b|em|i|small|span|strong|sub|sup|u)\b[^>]*>/gi, '').replace(/<[^>]*>/g, ' '),
+  );
+}
+
 function plainText(html: string): string {
-  return decodeEntities(html.replace(/<[^>]*>/g, ' '))
-    .replace(/\s+/g, ' ')
-    .trim();
+  let text = html;
+  for (let pass = 0; pass < DECODE_PASSES; pass += 1) {
+    const next = stripTags(text);
+    if (next === text) {
+      break;
+    }
+    text = next;
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function escapeRawControls(json: string): string {
+  let inString = false;
+  let escaped = false;
+  let out = '';
+  for (const char of json) {
+    if (inString && !escaped && char < ' ') {
+      out += `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      continue;
+    }
+    if (char === '"' && !escaped) {
+      inString = !inString;
+    }
+    escaped = inString && !escaped && char === '\\';
+    out += char;
+  }
+  return out;
+}
+
+function parseJsonLd(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error;
+    }
+  }
+  try {
+    return JSON.parse(escapeRawControls(body));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 function textOf(value: unknown): string {
@@ -75,12 +125,12 @@ function stepsOf(value: unknown): string[] {
 
 function imageOf(value: unknown): string | null {
   if (typeof value === 'string') {
-    return value;
+    return value.trim();
   }
   if (Array.isArray(value)) {
     return imageOf(value[0]);
   }
-  return isRecord(value) && typeof value.url === 'string' ? value.url : null;
+  return isRecord(value) && typeof value.url === 'string' ? value.url.trim() : null;
 }
 
 function isRecipeType(value: unknown): boolean {
@@ -110,16 +160,7 @@ function findRecipe(value: unknown): Record<string, unknown> | null {
 function fromJsonLd(html: string): SchemaRecipe | null {
   const scripts = html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   for (const [, body] of scripts) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        continue;
-      }
-      throw error;
-    }
-    const recipe = findRecipe(parsed);
+    const recipe = findRecipe(parseJsonLd(body));
     if (recipe !== null) {
       const ingredients = recipe.recipeIngredient ?? recipe.ingredients;
       return {

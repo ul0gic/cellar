@@ -15,22 +15,34 @@ export interface IngredientMatcher {
   match(name: string): Id | null;
 }
 
+const CLASS_WORD = /\s(?:whiskey|whisky|liqueur)$/;
+
 export function ingredientMatcher(db: Database): IngredientMatcher {
   const byName = new Map<string, Id>();
+  const byShortName = new Map<string, Id>();
   for (const row of db.prepare('SELECT id, folded_name FROM ingredients ORDER BY id').all()) {
     if (typeof row.id === 'number' && typeof row.folded_name === 'string' && !byName.has(row.folded_name)) {
       byName.set(row.folded_name, row.id);
     }
   }
+  for (const [name, id] of byName) {
+    const short = name.replace(CLASS_WORD, '');
+    if (short !== name && !byName.has(short) && !byShortName.has(short)) {
+      byShortName.set(short, id);
+    }
+  }
   return {
     match(name) {
-      const words = foldName(name)
+      const words = foldName(name.split(/[,(]/)[0].replace(/[®™©]/g, ' '))
         .split(/\s+/)
         .filter((word) => word !== '');
-      for (let start = 0; start < words.length; start += 1) {
-        const id = byName.get(words.slice(start).join(' '));
-        if (id !== undefined) {
-          return id;
+      for (let length = words.length; length > 0; length -= 1) {
+        for (let start = 0; start + length <= words.length; start += 1) {
+          const key = words.slice(start, start + length).join(' ');
+          const id = byName.get(key) ?? byShortName.get(key);
+          if (id !== undefined) {
+            return id;
+          }
         }
       }
       return null;
