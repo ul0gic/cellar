@@ -138,7 +138,7 @@ export function catalogStatus(ctx: AppContext): CatalogStatus {
     loaded: loadedVersion(ctx.db),
     schedule: readSettings(ctx.db).catalogSchedule,
     lastCheck: readJsonSetting(ctx.db, 'catalog_last_check', CatalogCheckSchema),
-    available: readJsonSetting(ctx.db, 'catalog_available', CatalogUpdateSchema),
+    available: readJsonSetting(ctx.db, 'catalog_available', CatalogUpdateSchema.nullable()),
   };
 }
 
