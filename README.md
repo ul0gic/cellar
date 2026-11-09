@@ -29,7 +29,7 @@ Cellar copies its database before any schema change.
 
 ## HTTPS
 
-Put Cellar behind your reverse proxy at its own host name, forwarding to port `7380`, and set `CELLAR_TRUSTED_PROXIES: private` in `compose.yaml`. Step-by-step setups for [Nginx Proxy Manager](docs/install.md#nginx-proxy-manager), [Caddy](docs/install.md#caddy), nginx and Traefik are in the install guide.
+Put Cellar behind your reverse proxy at its own host name, forwarding to port `7380`, and uncomment `CELLAR_TRUSTED_PROXIES=private` in `compose.yaml`. Step-by-step setups for [Nginx Proxy Manager](docs/install.md#nginx-proxy-manager), [Caddy](docs/install.md#caddy), nginx and Traefik are in the install guide.
 
 ## More
 

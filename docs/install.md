@@ -59,8 +59,8 @@ Cellar serves plain HTTP. To serve it over HTTPS, put a reverse proxy in front o
 
 ```yaml
 environment:
-  CELLAR_TRUSTED_PROXIES: private
-  CELLAR_BASE_PATH: /cellar # only when serving at a sub-path
+  - CELLAR_TRUSTED_PROXIES=private
+  - CELLAR_BASE_PATH=/cellar # only when serving at a sub-path
 ```
 
 - `CELLAR_TRUSTED_PROXIES` tells Cellar which addresses may set `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`. With it set, Cellar sees HTTPS and marks its sign-in cookie `Secure`. Use `private` or the proxy's address.
@@ -73,7 +73,7 @@ Give Cellar its own host name (`bar.example.com`) when you can; it needs no `CEL
 
 ### Nginx Proxy Manager
 
-1. In `compose.yaml`, uncomment `environment:` and `CELLAR_TRUSTED_PROXIES: private`, then `docker compose up -d`.
+1. In `compose.yaml`, uncomment the `CELLAR_TRUSTED_PROXIES=private` line, then `docker compose up -d`.
 2. In Nginx Proxy Manager, open Hosts, Proxy Hosts, Add Proxy Host:
    - Domain Names: `bar.example.com`
    - Scheme: `http`

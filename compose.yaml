@@ -1,18 +1,51 @@
+# =============================================================================
+# Docker Compose Configuration for Cellar
+# =============================================================================
+#
+# Description:
+# - Deploys Cellar, a self-hosted home-bar app: recipes, shelf inventory,
+#   "what can I make", shopping list, tasting notes and a TV drinks menu.
+#   The image ships with the full recipe catalog; nothing is downloaded.
+#
+# Volumes:
+# - "./data:/data" stores Cellar's database, photos and backups. Create the
+#   folder yourself before the first start (mkdir -p data), or Docker makes
+#   it owned by root and Cellar can't write to it.
+#
+# Network:
+# - Publishes port 7380. Behind a reverse proxy (Nginx Proxy Manager, Caddy),
+#   set CELLAR_TRUSTED_PROXIES below; to reach Cellar only through the proxy,
+#   join the proxy's Docker network and remove "ports".
+#
+# How to Use:
+# - Run `docker compose up -d` to start Cellar.
+# - Visit http://<server address>:7380, create the owner, and leave
+#   "Load the recipe book" on.
+# - Update with `docker compose pull && docker compose up -d`.
+# - Full guide: https://github.com/ul0gic/cellar/blob/main/docs/install.md
+#
+# ============================================================================
+
 services:
   cellar:
     image: ghcr.io/ul0gic/cellar:1
     container_name: cellar
     restart: unless-stopped
     init: true
+    # user: "1000:1000" # your `id -u`:`id -g`, if they aren't 1000
+
+    environment:
+      - TZ=Etc/UTC # your time zone, e.g. America/Chicago
+      # - CELLAR_TRUSTED_PROXIES=private # behind a reverse proxy
+      # - CELLAR_BASE_PATH=/cellar # only when served at a sub-path
+
     ports:
       - "7380:7380"
+
     volumes:
       - ./data:/data
+
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # user: "1001:1001"
-    # environment:
-    #   CELLAR_BASE_PATH: /cellar
-    #   CELLAR_TRUSTED_PROXIES: private

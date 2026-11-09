@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:26.13.0-trixie-slim AS build
+FROM --platform=$BUILDPLATFORM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS build
 RUN npm install -g pnpm@10.22.0
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -18,7 +18,7 @@ RUN pnpm deploy --legacy --prod --filter @cellar/backend /stage/backend \
   && ln -s "$(realpath --relative-to="$(dirname "${contract}")" /stage/contract)" "${contract}" \
   && ln -s "$(realpath --relative-to=/stage/contract "$(dirname "$(dirname "${contract}")")")" /stage/contract/node_modules
 
-FROM node:26.13.0-trixie-slim AS final
+FROM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS final
 ARG CELLAR_VERSION
 LABEL org.opencontainers.image.version="${CELLAR_VERSION}" \
   org.opencontainers.image.source="https://github.com/ul0gic/cellar"
