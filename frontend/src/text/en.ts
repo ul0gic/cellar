@@ -123,6 +123,7 @@ export const en = {
   'nav.importExport': 'Import and export',
   'nav.more': 'More',
   'nav.moreMenu': 'More pages',
+  'nav.accountMenu': 'Account',
   'nav.search': 'Search',
   'nav.searchBox': 'Search recipes, bottles',
   'nav.account': 'Account for {name}',

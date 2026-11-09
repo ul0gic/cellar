@@ -1,4 +1,4 @@
-import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { LightElements } from '@lightstart/components/elements.js';
 import { env } from '@lightstart/light/env';
 import { navigation } from '@lightstart/light/navigation';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
@@ -163,7 +163,7 @@ function topBar(session: SessionPerson): TemplateResult {
         aria-haspopup="menu"
         @click=${(event: MouseEvent) => openDropdown(event, '.cl-account-menu')}
       ><lc-icon name="user-round" aria-hidden="true"></lc-icon><span class="cl-vh">${text('nav.account', { name: session.person.name })}</span></button>
-      <lc-dropdown class="cl-account-menu" .items=${accountItems}></lc-dropdown>
+      <lc-dropdown class="cl-account-menu" aria-label=${text('nav.accountMenu')} .items=${accountItems}></lc-dropdown>
     </div>
   `;
 }
@@ -219,7 +219,7 @@ function chrome(): TemplateResult {
   if (wide.matches) {
     return html`<lc-app-shell layout="desktop" class="cl-shell">
       <lc-navbar slot="navbar">${topBar(session)}</lc-navbar>
-      <main>${page}</main>
+      ${page}
     </lc-app-shell>`;
   }
   if (kind === 'bare') {
@@ -231,7 +231,7 @@ function chrome(): TemplateResult {
     .headerHeight=${appBar.hidden === true ? '0px' : 'var(--appbar-h)'}
   >
     ${appBar.hidden === true ? nothing : compactAppBar(document.title.replace(/ \| .*$/, ''))}
-    <main>${page}</main>
+    ${page}
     ${tabBar()}
   </lc-app-shell>`;
 }

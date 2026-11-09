@@ -1,5 +1,5 @@
 import type { RecipePage, RecipeSummary } from '@cellar/contract';
-import type { DropdownItem, TableColumn, TableRow } from '@lightstart/light/components/types.js';
+import type { DropdownItem, TableColumn, TableRow } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';

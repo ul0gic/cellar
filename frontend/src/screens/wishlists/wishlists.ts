@@ -1,5 +1,5 @@
 import type { FieldError, Wishlist, WishlistItem } from '@cellar/contract';
-import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { LightElements } from '@lightstart/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';

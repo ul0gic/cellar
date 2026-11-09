@@ -8,7 +8,7 @@ import {
   type RecipeInput,
   type RecipeLineInput,
 } from '@cellar/contract';
-import type { FormField } from '@lightstart/light/components/types.js';
+import type { FormField } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
@@ -737,20 +737,23 @@ export function screen(ctx: ScreenContext): HTMLElement {
               }
             }
           }}
-        ></lc-form>
-        <div class="cl-form-footer">
-          ${
-            recipe === null
-              ? nothing
-              : html`<lc-button variant="ghost" class="cl-form-delete" @click=${() => void remove()}>
-                  <lc-icon name="trash-2" aria-hidden="true"></lc-icon>${text('recipes.deleteRecipe')}
-                </lc-button>`
-          }
-          <lc-button variant="quiet" href=${href(backPath)}>${text('action.cancel')}</lc-button>
-          <lc-button variant="primary" ?disabled=${saving} aria-busy=${saving ? 'true' : nothing} @click=${() => void save()}
-            >${text('recipes.saveRecipe')}</lc-button
-          >
-        </div>
+          @form-submit=${() => void save()}
+          @form-invalid=${() => void save()}
+        >
+          <div class="cl-form-footer">
+            ${
+              recipe === null
+                ? nothing
+                : html`<lc-button variant="ghost" class="cl-form-delete" @click=${() => void remove()}>
+                    <lc-icon name="trash-2" aria-hidden="true"></lc-icon>${text('recipes.deleteRecipe')}
+                  </lc-button>`
+            }
+            <lc-button variant="quiet" href=${href(backPath)}>${text('action.cancel')}</lc-button>
+            <lc-button type="submit" variant="primary" ?disabled=${saving} aria-busy=${saving ? 'true' : nothing}
+              >${text('recipes.saveRecipe')}</lc-button
+            >
+          </div>
+        </lc-form>
       `,
       element,
     );

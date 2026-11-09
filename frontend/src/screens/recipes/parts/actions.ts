@@ -1,4 +1,4 @@
-import type { DropdownItem } from '@lightstart/light/components/types.js';
+import type { DropdownItem } from '@lightstart/components/types.js';
 import { html, nothing } from '@lightstart/light/html';
 import { openSheet } from './sheet.ts';
 

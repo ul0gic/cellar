@@ -1,4 +1,4 @@
-import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { LightElements } from '@lightstart/components/elements.js';
 import type { ResourceHandle } from '@lightstart/light/controller';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError } from '../../../app/api.ts';

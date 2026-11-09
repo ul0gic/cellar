@@ -1,5 +1,5 @@
 import { LIMITS, type ShoppingList, type ShoppingListItem } from '@cellar/contract';
-import type { SearchDoc } from '@lightstart/light/components/types.js';
+import type { SearchDoc } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventChecked, eventNumber } from '../../app/events.ts';

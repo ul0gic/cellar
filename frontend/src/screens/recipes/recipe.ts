@@ -1,5 +1,5 @@
 import { formatAbv, formatVolume, type PreferredUnit, type Recipe, type RecipeLine } from '@cellar/contract';
-import type { DropdownItem } from '@lightstart/light/components/types.js';
+import type { DropdownItem } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventChecked, eventNumber, eventText } from '../../app/events.ts';

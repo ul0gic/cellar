@@ -11,8 +11,8 @@ import {
   normalizeMenuToken,
   type RecipeSummary,
 } from '@cellar/contract';
-import { registerFormFieldRenderer } from '@lightstart/light/components/form/field-renderers.js';
-import type { FormField, SearchDoc } from '@lightstart/light/components/types.js';
+import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
+import type { FormField, SearchDoc } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
 import { eventChecked, eventDetail, eventText } from '../../app/events.ts';

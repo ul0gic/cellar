@@ -1,4 +1,4 @@
-import { toasts } from '@lightstart/light/components/feedback/toasts.js';
+import { toasts } from '@lightstart/components/feedback/toasts.js';
 
 export interface ToastOptions {
   readonly title: string;

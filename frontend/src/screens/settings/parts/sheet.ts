@@ -1,4 +1,4 @@
-import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { LightElements } from '@lightstart/components/elements.js';
 import { html, render, type TemplateResult } from '@lightstart/light/html';
 
 const WIDE_QUERY = '(min-width: 1024px)';

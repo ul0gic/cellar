@@ -58,6 +58,7 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
   const duplicateLabel =
     kind === 'bottles' ? text('import-export.duplicateBottles') : text('import-export.duplicateIngredients');
   let step: Step = 1;
+  let drawnStep: Step = 1;
   let template: Template | null = null;
   let templateFailed = false;
   let file: File | null = null;
@@ -151,7 +152,7 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
   const templateStep = (): TemplateResult => {
     const name = `${kind}-template.csv`;
     return html`
-      <h2 class="cl-import-heading">${text('import-export.templateTitle')}</h2>
+      <h2 class="cl-import-heading" tabindex="-1">${text('import-export.templateTitle')}</h2>
       <p class="cl-import-text">
         ${kind === 'bottles' ? text('import-export.templateBottles') : text('import-export.templateIngredients')}
       </p>
@@ -185,7 +186,7 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
   };
 
   const uploadStep = (): TemplateResult => html`
-    <h2 class="cl-import-heading">${text('import-export.uploadTitle')}</h2>
+    <h2 class="cl-import-heading" tabindex="-1">${text('import-export.uploadTitle')}</h2>
     <lc-file-upload
       variant="dropzone"
       accept=".csv,text/csv"
@@ -237,7 +238,7 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
     const clean = checked.errors.length === 0;
     const toSave = checked.creates + checked.updates;
     return html`
-      <h2 class="cl-import-heading">
+      <h2 class="cl-import-heading" tabindex="-1">
         ${
           clean
             ? text('import-export.ready', { file: file.name })
@@ -376,6 +377,15 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
       </lc-wizard>`,
       element,
     );
+    if (step !== drawnStep) {
+      drawnStep = step;
+      requestAnimationFrame(() => {
+        const shown = element.querySelector<HTMLElement>(`[slot="step-${step}"]`);
+        (
+          shown?.querySelector<HTMLElement>('.cl-import-heading') ?? shown?.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+    }
   }
 
   draw();

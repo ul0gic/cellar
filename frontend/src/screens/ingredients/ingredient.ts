@@ -1,5 +1,5 @@
 import type { Ingredient, LineCoverage, Note, RatingValue, RecipeSummary, Verdict, Visibility } from '@cellar/contract';
-import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { LightElements } from '@lightstart/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventField, eventText } from '../../app/events.ts';

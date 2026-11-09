@@ -1,1 +1,1 @@
-export type { LightElements } from '@lightstart/light/components/elements.js';
+export type { LightElements } from '@lightstart/components/elements.js';

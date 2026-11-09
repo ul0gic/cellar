@@ -1,7 +1,7 @@
 import { IMAGE_ASPECT, IMAGE_PURPOSES, type ImagePurpose, LIMITS } from '@cellar/contract';
 import { defineComponent } from '@lightstart/light';
-import type { LightElements } from '@lightstart/light/components/elements.js';
-import { registerFormFieldRenderer } from '@lightstart/light/components/form/field-renderers.js';
+import type { LightElements } from '@lightstart/components/elements.js';
+import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
 import { html } from '@lightstart/light/html';
 import T from '@lightstart/light/types';
 import { text } from '../text/index.ts';

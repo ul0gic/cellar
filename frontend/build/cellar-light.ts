@@ -1,4 +1,4 @@
-import { iconMaskCSS } from '@lightstart/light/components/display/icon-mask.js';
+import { iconMaskCSS } from '@lightstart/components/display/icon-mask.js';
 import { themeCSS } from '@lightstart/light/theme';
 import { icon } from '@lightstart/light/theme/icons.js';
 import { icons as lucide } from '@iconify-json/lucide';

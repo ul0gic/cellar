@@ -7,8 +7,8 @@ import {
   UNIT_LABELS,
   type UnitId,
 } from '@cellar/contract';
-import { registerFormFieldRenderer } from '@lightstart/light/components/form/field-renderers.js';
-import type { SearchDoc } from '@lightstart/light/components/types.js';
+import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
+import type { SearchDoc } from '@lightstart/components/types.js';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
 import { eventChecked, eventText } from '../../../app/events.ts';

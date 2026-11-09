@@ -1,6 +1,6 @@
 import { defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
-import type { LightElements } from '@lightstart/light/components/elements.js';
+import type { LightElements } from '@lightstart/components/elements.js';
 import T from '@lightstart/light/types';
 import { text } from '../text/index.ts';
 import './cl-typed-confirm.css';
