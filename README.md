@@ -1,10 +1,12 @@
 # Cellar
 
-Cellar is a self-hosted home-bar app for one household. It keeps cocktail recipes, the ingredients and the bottles on your shelf, and answers what you can make now, what one bottle would unlock, and what to buy. Each person keeps tasting notes, shared or private, plus favorites and a wishlist. A live menu shows on the living-room TV from a link. Backups restore in one step, and AI help is optional, with your own key.
+A self-hosted home-bar app for one household. Cellar keeps your cocktail recipes, ingredients and the bottles on your shelf, and tells you what you can make now, what one more bottle would unlock, and what to buy. Everyone keeps their own tasting notes, favorites and wishlist. A live drinks menu shows on the living-room TV from a link.
 
-It runs as one Docker container with one data folder, on your own network.
+It ships as one Docker image with everything inside, including a catalog of 663 cocktails, 296 ingredients and their photos. Nothing is downloaded when you set it up.
 
-## Quick start
+## Install
+
+You need Docker with Compose v2 on linux/amd64 or linux/arm64.
 
 ```sh
 mkdir -p ~/cellar/data && cd ~/cellar
@@ -12,31 +14,46 @@ curl -fsSLO https://github.com/ul0gic/cellar/releases/latest/download/compose.ya
 docker compose up -d
 ```
 
-Open `http://<this computer's address>:8080` and create the owner.
+Open `http://<server address>:7380`, create the owner, and leave "Load the recipe book" on.
 
-[docs/install.md](docs/install.md) covers HTTPS behind a proxy, upgrades and rollback, backup and restore, every setting and exit code, and the TV menu.
+Create `data` yourself, as above: if Docker creates it, root owns it and Cellar can't write to it. Cellar runs as UID 1000; if your `id -u` is different, set the `user:` line in `compose.yaml`.
+
+## Update
+
+```sh
+cd ~/cellar
+docker compose pull && docker compose up -d
+```
+
+Cellar copies its database before any schema change.
+
+## HTTPS
+
+Put Cellar behind your reverse proxy at its own host name, forwarding to port `7380`, and set `CELLAR_TRUSTED_PROXIES: private` in `compose.yaml`. Step-by-step setups for [Nginx Proxy Manager](docs/install.md#nginx-proxy-manager), [Caddy](docs/install.md#caddy), nginx and Traefik are in the install guide.
+
+## More
+
+[docs/install.md](docs/install.md) covers rollback, backup and restore, the TV menu, and every setting, command and exit code.
 
 ## Development
 
-Requires Node 26.13.0 and pnpm 10. The workspace packages are `backend/` (the Fastify server and the `cellar` command), `frontend/` (the web app), `contract/` (the API in Zod, and the OpenAPI document generated from it) and `catalog/` (the recipe catalog builder).
+Requires Node 26.13.0 and pnpm 10.
 
 ```sh
 pnpm install
 pnpm typecheck        # tsc for every package
-pnpm lint             # Biome, then light check on frontend/src
-pnpm build:frontend   # Vite build of the web app
-pnpm openapi          # writes contract/dist/openapi.json
-pnpm catalog:build    # builds the catalog release into catalog/out
-pnpm docker:build     # builds the image as cellar:dev
+pnpm lint             # Biome, then light check
+pnpm build:frontend   # the web app
+pnpm openapi          # contract/dist/openapi.json
+pnpm docker:build     # the image, as cellar:dev
 ```
 
-To run the server from source on port 8080, create its data folder and a shipped catalog first:
+Run the server from source on port 7380:
 
 ```sh
 mkdir -p .rig/dev-data
 node catalog/bin/cellar-catalog.ts build --out .rig/dev-catalog
-CELLAR_SHIPPED_CATALOG_DIR=.rig/dev-catalog pnpm dev
-curl -fsS http://localhost:8080/healthcheck
+CELLAR_DATA_DIR=.rig/dev-data CELLAR_SHIPPED_CATALOG_DIR=.rig/dev-catalog node backend/bin/cellar.ts serve
 ```
 
-The development-only settings are listed at the end of [docs/install.md](docs/install.md#development-only). Releases are cut as described in [docs/release.md](docs/release.md).
+The packages are `backend/` (the server and the `cellar` command), `frontend/` (the web app), `contract/` (the API, defined once in Zod) and `catalog/` (the recipe catalog and its builder). See [CONTRIBUTING.md](CONTRIBUTING.md) to send a change and [docs/release.md](docs/release.md) for how releases are cut.

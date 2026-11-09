@@ -2,7 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { cellarLight } from './build/cellar-light.ts';
 
-const BACKEND = { target: 'http://localhost:8080', changeOrigin: false };
+const BACKEND = { target: 'http://localhost:7380', changeOrigin: false };
 
 export default defineConfig({
   root: import.meta.dirname,

@@ -9,6 +9,4 @@ backend/generated
 .project
 .claude
 spike
-tests/*
-!tests/package.json
 docs

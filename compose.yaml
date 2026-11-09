@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     init: true
     ports:
-      - "8080:8080"
+      - "7380:7380"
     volumes:
       - ./data:/data
     security_opt:

@@ -1,13 +1,13 @@
 {
   "name": "cellar",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=26.13.0"
   },
   "scripts": {
-    "typecheck": "tsc -p contract && tsc -p backend && tsc -p catalog && tsc -p frontend && tsc -p tests",
+    "typecheck": "tsc -p contract && tsc -p backend && tsc -p catalog && tsc -p frontend",
     "lint": "biome check --error-on-warnings . && pnpm light-check",
     "format": "biome format --write .",
     "light-check": "pnpm --filter @cellar/frontend exec light check src",

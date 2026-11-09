@@ -179,7 +179,7 @@ export function mountDemo(root: HTMLElement): void {
           <section aria-labelledby="demo-live">
             <h2 id="demo-live">Live card, QR, stacked bar</h2>
             <cl-live-card name="Christmas Eve" drinks="9" href="/menus/1"></cl-live-card>
-            <cl-qr value="http://172.16.150.247:8080/m/0123456789abcdefghjkmnpqrs"></cl-qr>
+            <cl-qr value="http://cellar.local:7380/m/0123456789abcdefghjkmnpqrs"></cl-qr>
             <cl-stacked-bar label="Shelf by category" .items=${SHELF}></cl-stacked-bar>
           </section>
 
@@ -198,7 +198,7 @@ export function mountDemo(root: HTMLElement): void {
             <lc-rating readonly step="0.5" .value=${4.5}></lc-rating>
             <lc-progress-bar value="412" max="663" label="Loading the recipe book"></lc-progress-bar>
             <lc-progress-bar indeterminate label="Making the backup"></lc-progress-bar>
-            <lc-clipboard text="http://172.16.150.247:8080/m/0123456789abcdefghjkmnpqrs" label="Copy the link"></lc-clipboard>
+            <lc-clipboard text="http://cellar.local:7380/m/0123456789abcdefghjkmnpqrs" label="Copy the link"></lc-clipboard>
             <lc-bar-chart label="Finished by year" height="140" show-values .data=${YEARS}></lc-bar-chart>
             <lc-form .fields=${FORM_FIELDS} .data=${FORM_DATA}></lc-form>
           </section>

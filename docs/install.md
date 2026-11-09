@@ -15,7 +15,7 @@ curl -fsSLO https://github.com/ul0gic/cellar/releases/latest/download/compose.ya
 docker compose up -d
 ```
 
-Then open `http://<this computer's address>:8080` in a browser and create the owner. The setup screen loads the recipe catalog in under a minute.
+Then open `http://<this computer's address>:7380` in a browser and create the owner. The setup screen loads the recipe catalog in under a minute.
 
 Create `data` yourself, as the first command does. If Docker creates it, the folder is owned by root and Cellar can't write to it.
 
@@ -28,11 +28,11 @@ docker logs cellar
 The last lines read:
 
 ```
-{"time":"…","level":"info","msg":"Cellar 1.0.0 is ready on port 8080 at /"}
-{"time":"…","level":"info","msg":"Cellar isn't set up yet. Open it in a browser on port 8080 to create the owner."}
+{"time":"…","level":"info","msg":"Cellar 1.0.0 is ready on port 7380 at /"}
+{"time":"…","level":"info","msg":"Cellar isn't set up yet. Open it in a browser on port 7380 to create the owner."}
 ```
 
-To use a different port on the host, change the left side of the `ports` line in `compose.yaml`, for example `"8081:8080"`, and run `docker compose up -d` again.
+To use a different port on the host, change the left side of the `ports` line in `compose.yaml`, for example `"8081:7380"`, and run `docker compose up -d` again.
 
 ### If your user isn't UID 1000
 
@@ -69,11 +69,42 @@ environment:
 
 Without `CELLAR_TRUSTED_PROXIES`, everything still works, but the cookie has no `Secure` flag and Cellar sees the proxy's address as every client's.
 
+Give Cellar its own host name (`bar.example.com`) when you can; it needs no `CELLAR_BASE_PATH` and no path rules.
+
+### Nginx Proxy Manager
+
+1. In `compose.yaml`, uncomment `environment:` and `CELLAR_TRUSTED_PROXIES: private`, then `docker compose up -d`.
+2. In Nginx Proxy Manager, open Hosts, Proxy Hosts, Add Proxy Host:
+   - Domain Names: `bar.example.com`
+   - Scheme: `http`
+   - Forward Hostname / IP: the server's LAN address, or `cellar` if Nginx Proxy Manager and Cellar share a Docker network (below)
+   - Forward Port: `7380`
+   - Block Common Exploits: on
+3. On the SSL tab, request a new certificate, and turn on Force SSL and HTTP/2 Support. Save.
+
+Nginx Proxy Manager passes `Host` and the forwarded headers, and its upload limit already allows a restore. No custom configuration is needed.
+
+To reach Cellar as `cellar` instead of by address, put both on the same Docker network. Find Nginx Proxy Manager's network with `docker network ls`, then add to `compose.yaml`:
+
+```yaml
+services:
+  cellar:
+    networks: [ proxy ]
+networks:
+  proxy:
+    external: true
+    name: npm_default # the network Nginx Proxy Manager is on
+```
+
+With a shared network you can also remove the `ports:` lines so Cellar is reachable only through the proxy.
+
+### Caddy
+
 Caddy, at its own host name:
 
 ```
 bar.example.com {
-  reverse_proxy cellar:8080
+  reverse_proxy cellar:7380
 }
 ```
 
@@ -82,16 +113,18 @@ Caddy at a sub-path, with `CELLAR_BASE_PATH=/cellar`:
 ```
 home.example.com {
   handle /cellar* {
-    reverse_proxy cellar:8080
+    reverse_proxy cellar:7380
   }
 }
 ```
+
+### nginx and Traefik
 
 nginx, with `CELLAR_BASE_PATH=/cellar`:
 
 ```nginx
 location /cellar/ {
-  proxy_pass http://cellar:8080;
+  proxy_pass http://cellar:7380;
   proxy_set_header Host $host;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
@@ -107,10 +140,10 @@ labels:
   traefik.http.routers.cellar.rule: Host(`home.example.com`) && PathPrefix(`/cellar`)
   traefik.http.routers.cellar.entrypoints: websecure
   traefik.http.routers.cellar.tls: "true"
-  traefik.http.services.cellar.loadbalancer.server.port: "8080"
+  traefik.http.services.cellar.loadbalancer.server.port: "7380"
 ```
 
-`cellar:8080` works when the proxy runs in the same Compose network as Cellar. Otherwise use the host's address and published port. `client_max_body_size 2g` lets a restore upload through nginx; a backup can be up to 2 GB.
+`cellar:7380` works when the proxy runs in the same Compose network as Cellar. Otherwise use the host's address and published port. `client_max_body_size 2g` lets a restore upload through nginx; a backup can be up to 2 GB.
 
 If saving anything fails with "This request came from another site and was blocked", the proxy is changing the host name. Pass `Host` as shown, or add the proxy to `CELLAR_TRUSTED_PROXIES`.
 
@@ -269,7 +302,7 @@ All settings are optional environment variables, set under `environment:` in `co
 | ------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `CELLAR_BASE_PATH`       | `/`                                                                             | Path prefix Cellar is served under, for a reverse proxy at a sub-path                                 | Starts with `/`; letters, digits, `-`, `_`, `.`, `/`. A trailing `/` is dropped                                                            |
 | `CELLAR_TRUSTED_PROXIES` | empty (trust none)                                                              | Addresses whose `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` headers Cellar believes | Comma list of IPv4 or IPv6 addresses and CIDR ranges, or `private` (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7, 127.0.0.0/8, ::1) |
-| `CELLAR_PORT`            | `8080`                                                                          | Port inside the container. Change it only with host networking; otherwise change `ports`              | 1 to 65535                                                                                                                                 |
+| `CELLAR_PORT`            | `7380`                                                                          | Port inside the container. Change it only with host networking; otherwise change `ports`              | 1 to 65535                                                                                                                                 |
 | `CELLAR_LOG_LEVEL`       | `info`                                                                          | Log detail                                                                                            | `error`, `warn`, `info`, `debug`                                                                                                           |
 | `CELLAR_CATALOG_URL`     | `https://github.com/ul0gic/cellar/releases/download/catalog/catalog-index.json` | Where "check for catalog updates" looks                                                               | An `https://` address                                                                                                                      |
 
@@ -365,7 +398,7 @@ Every command exits 2 for an unknown command or option, or wrong arguments: `Unk
 | Code | Meaning                                                                                       |
 | ---- | --------------------------------------------------------------------------------------------- |
 | 0    | The server answered 200 at `/healthcheck` within 4 s                                          |
-| 1    | It didn't, or a setting is invalid; stderr says why: `Cellar isn't answering on port 8080: …` |
+| 1    | It didn't, or a setting is invalid; stderr says why: `Cellar isn't answering on port 7380: …` |
 
 ### `cellar reset-owner-password`
 
@@ -441,7 +474,7 @@ Set `image:` back to the newer version, or [roll back](#roll-back-after-a-succes
 **`The database upgrade failed and the copy couldn't be put back: …. Your data is in /data/cellar.pre-migration.db. Rename it to cellar.db and start the previous Cellar version.`** (exit 13)
 With Cellar stopped (`docker compose down`): `mv data/cellar.db data/cellar.db.failed`, `rm -f data/cellar.db-wal data/cellar.db-shm`, `mv data/cellar.pre-migration.db data/cellar.db`, set `image:` to the previous version, `docker compose up -d`.
 
-**`Port 8080 is already in use inside the container. Set CELLAR_PORT or free the port.`** (exit 14)
+**`Port 7380 is already in use inside the container. Set CELLAR_PORT or free the port.`** (exit 14)
 With the default `compose.yaml` nothing else runs in the container, so this happens with host networking (`network_mode: host`). Set `CELLAR_PORT` to a free port.
 
 **`The disk is full; writes are failing.`**

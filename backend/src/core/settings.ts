@@ -60,7 +60,7 @@ function parseTrustedProxies(value: string | undefined): readonly IpRange[] {
 
 function parsePort(value: string | undefined): number {
   if (value === undefined) {
-    return 8080;
+    return 7380;
   }
   const port = /^[0-9]{1,5}$/.test(value) ? Number.parseInt(value, 10) : 0;
   if (port < 1 || port > 65_535) {

@@ -1,4 +1,4 @@
-FROM node:26.13.0-trixie-slim AS build
+FROM --platform=$BUILDPLATFORM node:26.13.0-trixie-slim AS build
 RUN npm install -g pnpm@10.22.0
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -6,7 +6,6 @@ COPY backend/package.json backend/
 COPY catalog/package.json catalog/
 COPY contract/package.json contract/
 COPY frontend/package.json frontend/
-COPY tests/package.json tests/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build:frontend
@@ -33,7 +32,7 @@ COPY --from=build /src/backend/generated/licenses.json /app/backend/generated/li
 COPY --from=build /src/catalog/out/ /app/catalog/
 ENV NODE_ENV=production CELLAR_SHIPPED_CATALOG_DIR=/app/catalog
 USER node
-EXPOSE 8080
+EXPOSE 7380
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["cellar", "healthcheck"]
 ENTRYPOINT ["cellar"]
 CMD ["serve"]
