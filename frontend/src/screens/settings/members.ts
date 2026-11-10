@@ -1,183 +1,205 @@
 import { LIMITS, type Member } from '@cellar/contract';
 import type { LightElements } from '@lightstart/components/elements.js';
-import { html, nothing, render } from '@lightstart/light/html';
+import type { FormField } from '@lightstart/components/types.js';
+import View from '@lightstart/light';
+import { html, nothing } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
-import { eventText } from '../../app/events.ts';
-import { watch } from '../../app/load.ts';
-import { actionFailed, fieldError, problemText } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import type { ScreenContext, SessionPerson } from '../../app/types.ts';
+import { session } from '../../app/controllers/session.ts';
+import { loadState } from '../../app/load.ts';
+import { actionFailed, formErrors, problemText } from '../../app/problems.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { setAppBar } from '../../app/shell.ts';
+import { formValues, valueText } from '../../app/events.ts';
 import { confirm } from '../../design-system/dialogs.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
-import { settingsPage } from './parts/frame.ts';
-import { loadFailed } from './parts/load-failed.ts';
-import { openSheet } from './parts/sheet.ts';
+import { settingsFrame, settingsLoad } from './parts/frame.ts';
+import { openSheet, type Sheet } from './parts/sheet.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/avatar.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/clipboard.ts';
+import '../../design-system/lc/dropdown.ts';
+import '../../design-system/lc/form.ts';
+import '../../design-system/lc/icon.ts';
+
+export const tag = 'cl-screen-settings-members';
 
 interface OneTime {
   readonly name: string;
   readonly password: string;
 }
 
-function memberSheet(
-  title: string,
-  actionLabel: string,
-  startName: string,
-  askPassword: boolean,
-  send: (name: string, password: string | null) => Promise<void>,
-): void {
-  let name = startName;
-  let password = '';
-  let nameError = '';
-  let passwordError = '';
-  let busy = false;
-  const submit = async (): Promise<void> => {
-    const trimmed = name.trim();
-    nameError = trimmed.length === 0 ? text('settings.members.nameMissing') : '';
-    passwordError = askPassword && password.length < LIMITS.password.min ? text('setup.weak') : '';
-    if (nameError !== '' || passwordError !== '') {
-      sheet.redraw();
+const MEMBER_NAMES = ['name', 'password'];
+
+const NAME_FIELD: FormField = { name: 'name', type: 'text', label: text('settings.members.name') };
+
+const PASSWORD_FIELD: FormField = {
+  name: 'password',
+  type: 'password',
+  label: text('settings.members.password'),
+  help: text('settings.members.passwordHint'),
+};
+
+class SettingsMembers extends View {
+  readonly members = apiResource('listMembers', ['settings']);
+  readonly state = loadState([this.members]);
+  readonly oneTime = signal<OneTime | null>(null);
+
+  connected(): void {
+    this.classList.add('cl-settings');
+    setAppBar({ back: '/more' });
+    this.members.bind(this, {});
+  }
+
+  private memberSheet(
+    title: string,
+    actionLabel: string,
+    startName: string,
+    askPassword: boolean,
+    send: (name: string, password: string | null) => Promise<void>,
+  ): void {
+    const fieldValues = signal<Record<string, unknown>>({ name: startName });
+    const fieldErrors = signal<Record<string, string>>({});
+    const working = signal(false);
+    const fields = askPassword ? [NAME_FIELD, PASSWORD_FIELD] : [NAME_FIELD];
+    const submit = async (): Promise<void> => {
+      const current = fieldValues.peek();
+      const trimmed = valueText(current, 'name').trim();
+      const password = valueText(current, 'password');
+      const missing: Record<string, string> = {};
+      if (trimmed.length === 0) {
+        missing.name = text('settings.members.nameMissing');
+      }
+      if (askPassword && password.length < LIMITS.password.min) {
+        missing.password = text('setup.weak');
+      }
+      fieldErrors.value = missing;
+      if (Object.keys(missing).length > 0) {
+        return;
+      }
+      working.value = true;
+      try {
+        await send(trimmed, askPassword ? password : null);
+        sheet.close();
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'duplicate_name') {
+          fieldErrors.value = { name: problemText(error) };
+        } else if (error instanceof ApiError && error.code === 'validation_failed') {
+          fieldErrors.value = formErrors(error, MEMBER_NAMES).fields;
+        } else {
+          actionFailed(error, () => void submit());
+        }
+      } finally {
+        working.value = false;
+      }
+    };
+    const sheet: Sheet = openSheet(this, title, () => ({
+      body: html`<lc-form
+        class="cl-settings-form"
+        layout="stacked"
+        .fields=${fields}
+        .data=${fieldValues.value}
+        .errors=${fieldErrors.value}
+        @field-change=${(event: Event) => {
+          const next = formValues(event);
+          if (next !== null) {
+            fieldValues.value = next;
+          }
+        }}
+        @form-submit=${() => {
+          if (!working.peek()) {
+            void submit();
+          }
+        }}
+      ></lc-form>`,
+      footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
+        <lc-button variant="primary" ?disabled=${working.value} @click=${() => void submit()}>${actionLabel}</lc-button>`,
+    }));
+  }
+
+  private async reset(member: Member): Promise<void> {
+    if (!this.isConnected) {
       return;
     }
-    busy = true;
-    sheet.redraw();
-    try {
-      await send(trimmed, askPassword ? password : null);
-      sheet.close();
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'duplicate_name') {
-        nameError = problemText(error);
-      } else if (error instanceof ApiError && error.code === 'validation_failed') {
-        nameError = fieldError(error, 'name');
-        passwordError = fieldError(error, 'password');
-      } else {
-        actionFailed(error, () => void submit());
-      }
-    } finally {
-      busy = false;
+    const sure = await confirm(this, {
+      title: text('settings.members.resetTitle', { name: member.name }),
+      message: text('settings.members.resetBody'),
+      confirmLabel: text('settings.members.reset'),
+    });
+    if (!sure) {
+      return;
     }
-    sheet.redraw();
-  };
-  const sheet = openSheet(title, () => ({
-    body: html`<form
-      class="cl-sheet-form"
-      novalidate
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
-        if (!busy) {
-          void submit();
-        }
-      }}
-    >
-      <lc-input
-        label=${text('settings.members.name')}
-        .value=${name}
-        error-message=${nameError}
-        @input=${(event: Event) => {
-          name = eventText(event);
-        }}
-      ></lc-input>
-      ${
-        askPassword
-          ? html`<div class="cl-field">
-              <lc-input
-                label=${text('settings.members.password')}
-                type="password"
-                autocomplete="new-password"
-                .value=${password}
-                error-message=${passwordError}
-                hint=${text('settings.members.passwordHint')}
-                @input=${(event: Event) => {
-                  password = eventText(event);
-                }}
-              ></lc-input>
-            </div>`
-          : nothing
+    try {
+      const result = await call('resetMemberPassword', { params: { id: member.id } });
+      dataChanged('settings');
+      if (this.isConnected) {
+        this.oneTime.value = { name: member.name, password: result.temporaryPassword };
       }
-    </form>`,
-    footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
-      <lc-button variant="primary" ?disabled=${busy} @click=${() => void submit()}>${actionLabel}</lc-button>`,
-  }));
-}
+    } catch (error) {
+      actionFailed(error, () => void this.reset(member));
+    }
+  }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  return settingsPage(ctx, 'members', (main, session: SessionPerson) => {
-    const members = resourceFor('listMembers', {}, { tags: ['settings'] });
-    const owner = session.person.role === 'owner';
-    let oneTime: OneTime | null = null;
+  private async removeMember(member: Member): Promise<void> {
+    if (!this.isConnected) {
+      return;
+    }
+    const sure = await confirm(this, {
+      title: text('settings.members.removeTitle', { name: member.name }),
+      message: text('settings.members.removeBody'),
+      confirmLabel: text('settings.members.remove'),
+      danger: true,
+    });
+    if (!sure) {
+      return;
+    }
+    try {
+      await call('removeMember', { params: { id: member.id } });
+      dataChanged('settings', 'notes', 'wishlists', 'stats');
+    } catch (error) {
+      actionFailed(error, () => void this.removeMember(member));
+    }
+  }
 
-    const reset = async (member: Member): Promise<void> => {
-      const sure = await confirm({
-        title: text('settings.members.resetTitle', { name: member.name }),
-        message: text('settings.members.resetBody'),
-        confirmLabel: text('settings.members.reset'),
-      });
-      if (!sure) {
-        return;
-      }
-      try {
-        const result = await call('resetMemberPassword', { params: { id: member.id } });
-        oneTime = { name: member.name, password: result.temporaryPassword };
-        invalidate('settings');
-        redraw();
-      } catch (error) {
-        actionFailed(error, () => void reset(member));
-      }
-    };
+  private rename(member: Member): void {
+    this.memberSheet(
+      text('settings.members.renameTitle', { name: member.name }),
+      text('settings.members.renameSave'),
+      member.name,
+      false,
+      async (name) => {
+        await call('updateMember', { params: { id: member.id }, body: { name } });
+        dataChanged('settings');
+        await session.refresh();
+      },
+    );
+  }
 
-    const remove = async (member: Member): Promise<void> => {
-      const sure = await confirm({
-        title: text('settings.members.removeTitle', { name: member.name }),
-        message: text('settings.members.removeBody'),
-        confirmLabel: text('settings.members.remove'),
-        danger: true,
-      });
-      if (!sure) {
-        return;
-      }
-      try {
-        await call('removeMember', { params: { id: member.id } });
-        invalidate('settings', 'notes', 'wishlists', 'stats');
-      } catch (error) {
-        actionFailed(error, () => void remove(member));
-      }
-    };
+  private add(): void {
+    this.memberSheet(
+      text('settings.members.addTitle'),
+      text('settings.members.addSave'),
+      '',
+      session.current.peek()?.requireLogin === true,
+      async (name, password) => {
+        await call('createMember', { body: { name, password } });
+        dataChanged('settings');
+      },
+    );
+  }
 
-    const rename = (member: Member): void =>
-      memberSheet(
-        text('settings.members.renameTitle', { name: member.name }),
-        text('settings.members.renameSave'),
-        member.name,
-        false,
-        async (name) => {
-          await call('updateMember', { params: { id: member.id }, body: { name } });
-          invalidate('settings');
-          await ctx.person.refresh();
-        },
-      );
+  private openMenu(event: MouseEvent, member: Member): void {
+    const trigger = event.currentTarget;
+    const menu = this.querySelector<LightElements['lc-dropdown']>(`#member-menu-${member.id}`);
+    if (trigger instanceof Element && menu !== null) {
+      menu.toggle(trigger);
+    }
+  }
 
-    const add = (): void =>
-      memberSheet(
-        text('settings.members.addTitle'),
-        text('settings.members.addSave'),
-        '',
-        session.requireLogin,
-        async (name, password) => {
-          await call('createMember', { body: { name, password } });
-          invalidate('settings');
-        },
-      );
-
-    const openMenu = (event: MouseEvent, member: Member): void => {
-      const trigger = event.currentTarget;
-      const menu = main.querySelector<LightElements['lc-dropdown']>(`#member-menu-${member.id}`);
-      if (trigger instanceof Element && menu !== null) {
-        menu.toggle(trigger);
-      }
-    };
-
-    const row = (member: Member) => html`<div class="cl-srow">
+  private row(member: Member, owner: boolean) {
+    return html`<div class="cl-srow">
       <lc-avatar shape="rounded" size="sm" name=${member.name} src=${member.avatar?.url ?? nothing}></lc-avatar>
       <span class="cl-srow-text"
         ><b>${member.name}</b
@@ -190,28 +212,30 @@ export function screen(ctx: ScreenContext): HTMLElement {
                 icon-only
                 aria-haspopup="menu"
                 aria-label=${text('settings.members.actions', { name: member.name })}
-                @click=${(event: MouseEvent) => openMenu(event, member)}
+                @click=${(event: MouseEvent) => this.openMenu(event, member)}
                 ><lc-icon name="ellipsis" aria-hidden="true"></lc-icon
               ></lc-button>
               <lc-dropdown
                 id=${`member-menu-${member.id}`}
                 aria-label=${text('settings.members.actions', { name: member.name })}
                 .items=${[
-                  { label: text('settings.members.rename'), icon: 'pencil', onClick: () => rename(member) },
-                  { label: text('settings.members.reset'), icon: 'key-round', onClick: () => void reset(member) },
+                  { label: text('settings.members.rename'), icon: 'pencil', onClick: () => this.rename(member) },
+                  { label: text('settings.members.reset'), icon: 'key-round', onClick: () => void this.reset(member) },
                   {
                     label: text('settings.members.remove'),
                     icon: 'trash-2',
                     danger: true,
-                    onClick: () => void remove(member),
+                    onClick: () => void this.removeMember(member),
                   },
                 ]}
               ></lc-dropdown>`
           : nothing
       }
     </div>`;
+  }
 
-    const reveal = (shown: OneTime) => html`<lc-alert
+  private reveal(shown: OneTime) {
+    return html`<lc-alert
       class="cl-settings-banner"
       variant="info"
       icon="key-round"
@@ -227,32 +251,43 @@ export function screen(ctx: ScreenContext): HTMLElement {
         ></lc-clipboard>
       </div>
     </lc-alert>`;
+  }
 
-    const view = (list: readonly Member[]) => html`<section class="cl-sgroup" aria-labelledby="settings-members">
+  private view(list: readonly Member[]) {
+    const owner = session.current.value?.person.role === 'owner';
+    const shown = this.oneTime.value;
+    return html`<section class="cl-sgroup" aria-labelledby="settings-members">
       <h2 id="settings-members">${text('settings.members')}</h2>
       <p>${text('settings.members.lead')}</p>
-      ${oneTime === null ? nothing : reveal(oneTime)}
-      <div class="cl-panel">${list.map(row)}</div>
+      ${shown === null ? nothing : this.reveal(shown)}
+      <div class="cl-panel">${list.map((member) => this.row(member, owner))}</div>
       ${
         owner
           ? html`<div class="cl-actions">
-              <lc-button variant="quiet" @click=${add}
+              <lc-button variant="quiet" @click=${() => this.add()}
                 ><lc-icon name="plus" aria-hidden="true"></lc-icon>${text('settings.members.add')}</lc-button
               >
             </div>`
           : nothing
       }
     </section>`;
+  }
 
-    const { redraw } = watch(main, [members], ({ phase, retry }) => {
-      const list = members.peek();
-      if (phase === 'failed') {
-        render(loadFailed(text('settings.members'), retry), main);
-      } else if (phase === 'slow') {
-        render(skeleton('rows', text('settings.members')), main);
-      } else if (phase === 'ready' && list !== undefined) {
-        render(view(list.members), main);
-      }
+  render() {
+    return settingsFrame('members', () => {
+      const list = this.members.value.value;
+      return (
+        settingsLoad(this.state, text('settings.members'), 'rows') ??
+        (list === undefined ? nothing : this.view(list.members))
+      );
     });
-  });
+  }
+}
+
+View.register(tag, SettingsMembers);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsMembers;
+  }
 }

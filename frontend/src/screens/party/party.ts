@@ -1,27 +1,44 @@
 import type { PartyLine, PartyResult } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal, untracked } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
+import { route } from '../../app/controllers/route.ts';
 import { eventChecked, eventNumber } from '../../app/events.ts';
-import { onLeave, slowFlag } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate } from '../../app/resources.ts';
-import { href } from '../../app/router.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { SKELETON_DELAY_MS, dataChanged } from '../../app/resources.ts';
+import { href, navigate, setQuery } from '../../app/router.ts';
+import '../../design-system/cl-bulb.ts';
+import '../../design-system/cl-figure.ts';
 import { illustration } from '../../design-system/illustration.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/number-input.ts';
+import '../../design-system/lc/switch.ts';
+import { loadFailed } from '../../design-system/load-view.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatCount } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
 import { openSheet } from '../recipes/parts/sheet.ts';
 import { undoAdded } from '../recipes/parts/shopping-undo.ts';
-import { countsText, mlText, ozText, PARTY_SERVINGS_MAX, readPlan, servingsFor } from './parts/party-state.ts';
+import {
+  countsText,
+  mlText,
+  ozText,
+  PARTY_SERVINGS_MAX,
+  type PartyPlan,
+  readPlan,
+  servingsFor,
+} from './parts/party-state.ts';
 import './party.css';
 
 type Loaded =
   | { readonly kind: 'loading' }
   | { readonly kind: 'empty' }
   | { readonly kind: 'failed' }
-  | { readonly kind: 'ready'; readonly from: string | null; readonly result: PartyResult };
+  | { readonly kind: 'ready'; readonly from: string | null; readonly plan: PartyPlan; readonly result: PartyResult };
 
 function lineStatus(line: PartyLine): TemplateResult {
   if (line.satisfied) {
@@ -39,68 +56,92 @@ function lineStatus(line: PartyLine): TemplateResult {
   </span>`;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-party cl-reading';
-  let state: Loaded = { kind: 'loading' };
-  let run = 0;
+export const tag = 'cl-screen-party-party';
 
-  const recipeIds = async (): Promise<{ ids: readonly number[]; from: string | null }> => {
-    const plan = readPlan(ctx.query);
+class Party extends View {
+  readonly loaded = signal<Loaded>({ kind: 'loading' });
+  readonly slow = signal(false);
+  private run = 0;
+  private computedFor: string | null = null;
+
+  connected(): void {
+    this.classList.add('cl-party', 'cl-reading');
+    const timer = setTimeout(() => {
+      this.slow.value = true;
+    }, SKELETON_DELAY_MS);
+    this.$own(() => clearTimeout(timer));
+    const follow = effect(() => {
+      const query = route.query.value;
+      untracked(() => {
+        const key = query.toString();
+        if (key !== this.computedFor) {
+          this.computedFor = key;
+          void this.compute(readPlan(query));
+        }
+      });
+    });
+    this.$own(() => follow.dispose());
+  }
+
+  async recipeIds(plan: PartyPlan): Promise<{ ids: readonly number[]; from: string | null }> {
     if (plan.collectionId !== null) {
       const collection = await call('getCollection', { params: { id: plan.collectionId } });
       return { ids: collection.recipes.map((recipe) => recipe.id), from: collection.name };
     }
     return { ids: plan.recipeIds, from: null };
-  };
+  }
 
-  const compute = async (): Promise<void> => {
-    const current = ++run;
+  async compute(plan: PartyPlan): Promise<void> {
+    const current = ++this.run;
+    let next: Loaded;
     try {
-      const { ids, from } = await recipeIds();
+      const { ids, from } = await this.recipeIds(plan);
       if (ids.length === 0) {
-        state = { kind: 'empty' };
+        next = { kind: 'empty' };
       } else {
-        const plan = readPlan(ctx.query);
         const result = await call('calculateParty', {
           body: { recipes: ids.map((recipeId) => ({ recipeId, servings: servingsFor(plan, recipeId) })) },
         });
-        state = { kind: 'ready', from, result };
+        next = { kind: 'ready', from, plan, result };
       }
     } catch (error) {
       if (!(error instanceof ApiError)) {
         throw error;
       }
-      state = error.code === 'not_found' ? { kind: 'empty' } : { kind: 'failed' };
+      next = error.code === 'not_found' ? { kind: 'empty' } : { kind: 'failed' };
     }
-    if (current === run) {
-      draw();
+    if (current === this.run) {
+      this.loaded.value = next;
     }
-  };
+  }
 
-  const setSame = (same: boolean, result: PartyResult): void => {
-    const plan = readPlan(ctx.query);
-    ctx.query.set(
+  retry(): void {
+    void this.compute(readPlan(route.query.peek()));
+  }
+
+  setSame(same: boolean, result: PartyResult): void {
+    const plan = readPlan(route.query.peek());
+    setQuery(
       same
         ? { each: null }
         : { each: result.recipes.map((item) => `${item.recipe.id}:${servingsFor(plan, item.recipe.id)}`).join(',') },
       'replace',
     );
-  };
+  }
 
-  const setServings = (recipeId: number | null, servings: number, result: PartyResult): void => {
-    const plan = readPlan(ctx.query);
+  setServings(recipeId: number | null, servings: number, result: PartyResult): void {
+    const plan = readPlan(route.query.peek());
     if (recipeId === null) {
-      ctx.query.set({ servings: String(servings) }, 'replace');
+      setQuery({ servings: String(servings) }, 'replace');
       return;
     }
     const each = result.recipes.map(
       (item) => `${item.recipe.id}:${item.recipe.id === recipeId ? servings : servingsFor(plan, item.recipe.id)}`,
     );
-    ctx.query.set({ each: each.join(',') }, 'replace');
-  };
+    setQuery({ each: each.join(',') }, 'replace');
+  }
 
-  const addMissing = async (result: PartyResult): Promise<void> => {
+  async addMissing(result: PartyResult): Promise<void> {
     const missing = result.lines.filter((line) => !line.satisfied && !line.optionalOnly);
     try {
       const before = await call('getShoppingList', {});
@@ -108,7 +149,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       const change = await call('addToShoppingList', {
         body: { items: missing.map((line) => ({ ingredientId: line.ingredient.id })) },
       });
-      invalidate('shopping');
+      dataChanged('shopping');
       const added = change.list.items.filter((item) => !listed.has(item.ingredient.id));
       if (added.length === 0) {
         toast({ title: text('party.alreadyListed') });
@@ -125,13 +166,16 @@ export function screen(ctx: ScreenContext): HTMLElement {
         action: { label: text('toast.undo'), run: () => void undoAdded(added.map((item) => item.id)) },
       });
     } catch (error) {
-      actionFailed(error, () => void addMissing(result));
+      actionFailed(error, () => void this.addMissing(result));
     }
-  };
+  }
 
-  const chooseRecipes = async (): Promise<void> => {
+  async chooseRecipes(): Promise<void> {
     const { collections } = await call('listCollections', {});
-    const sheet = openSheet({
+    if (!this.isConnected) {
+      return;
+    }
+    const sheet = openSheet(this, {
       heading: () => text('party.chooseHeading'),
       body: () =>
         collections.length === 0
@@ -143,23 +187,22 @@ export function screen(ctx: ScreenContext): HTMLElement {
                   class="cl-action-sheet-item"
                   @click=${() => {
                     sheet.close();
-                    ctx.navigate(`/party?collection=${collection.id}`);
+                    navigate(`/party?collection=${collection.id}`);
                   }}
                 >${collection.name}</button>`,
               )}
             </div>`,
     });
-  };
+  }
 
-  const servingsPanel = (result: PartyResult): TemplateResult => {
-    const plan = readPlan(ctx.query);
+  servingsPanel(plan: PartyPlan, result: PartyResult): TemplateResult {
     const names = result.recipes.map((item) => item.recipe.name).join(', ');
     return html`<div class="cl-party-panel">
       <lc-switch
         label=${text('party.same')}
         hint=${text('party.sameHint')}
         ?checked=${plan.same}
-        @change=${(event: Event) => setSame(eventChecked(event), result)}
+        @change=${(event: Event) => this.setSame(eventChecked(event), result)}
       ></lc-switch>
       ${
         plan.same
@@ -179,7 +222,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                 @change=${(event: Event) => {
                   const next = eventNumber(event);
                   if (next !== null) {
-                    setServings(null, next, result);
+                    this.setServings(null, next, result);
                   }
                 }}
               ></lc-number-input>`
@@ -195,7 +238,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                     @change=${(event: Event) => {
                       const next = eventNumber(event);
                       if (next !== null) {
-                        setServings(item.recipe.id, next, result);
+                        this.setServings(item.recipe.id, next, result);
                       }
                     }}
                   ></lc-number-input>
@@ -204,9 +247,9 @@ export function screen(ctx: ScreenContext): HTMLElement {
             </ul>`
       }
     </div>`;
-  };
+  }
 
-  const totals = (result: PartyResult): TemplateResult => {
+  totals(result: PartyResult): TemplateResult {
     const missing = result.lines.filter((line) => !line.satisfied && !line.optionalOnly);
     return html`<section class="cl-party-section" aria-labelledby="cl-party-totals">
       <div class="cl-party-section-head">
@@ -242,7 +285,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
         ${
           missing.length === 0
             ? nothing
-            : html`<lc-button variant="primary" @click=${() => void addMissing(result)}
+            : html`<lc-button variant="primary" @click=${() => void this.addMissing(result)}
                 >${text(missing.length === 1 ? 'party.addOne' : 'party.addMany', { count: missing.length })}</lc-button
               >`
         }
@@ -251,53 +294,37 @@ export function screen(ctx: ScreenContext): HTMLElement {
         </lc-button>
       </div>
     </section>`;
-  };
+  }
 
-  const draw = (): void => {
+  render() {
     const head = (from: string | null): TemplateResult => html`<header class="cl-party-head">
       <h1 class="cl-party-title">${text('nav.party')}</h1>
       <p class="cl-party-muted">${from === null ? text('party.subtitle') : text('party.from', { name: from })}</p>
     </header>`;
+    const state = this.loaded.value;
     switch (state.kind) {
       case 'loading':
-        if (slow.slow() && element.querySelector('.cl-skeleton') === null) {
-          element.replaceChildren(skeleton('lines', text('nav.party')));
-        }
-        return;
+        return this.slow.value ? html`${skeleton('lines', text('nav.party'))}` : nothing;
       case 'failed':
-        render(
-          html`<lc-empty-state title=${text('loadFailed.title', { screen: text('nav.party') })} description=${text('loadFailed.body')}>
-            ${illustration('empty-lost')}
-            <lc-button variant="primary" @click=${() => void compute()}>${text('loadFailed.retry')}</lc-button>
-          </lc-empty-state>`,
-          element,
-        );
-        return;
+        return loadFailed(text('nav.party'), () => this.retry(), 'none');
       case 'empty':
-        element.querySelector('.cl-skeleton')?.remove();
-        render(
-          html`${head(null)}
-            <lc-empty-state title=${text('party.emptyTitle')} description=${text('party.empty')}>
-              ${illustration('empty-glass')}
-              <lc-button variant="primary" @click=${() => void chooseRecipes().catch((error: unknown) => actionFailed(error, () => undefined))}
-                >${text('party.choose')}</lc-button
-              >
-            </lc-empty-state>`,
-          element,
-        );
-        return;
+        return html`${head(null)}
+          <lc-empty-state title=${text('party.emptyTitle')} description=${text('party.empty')}>
+            ${illustration('empty-glass')}
+            <lc-button variant="primary" @click=${() => void this.chooseRecipes().catch((error: unknown) => actionFailed(error, () => undefined))}
+              >${text('party.choose')}</lc-button
+            >
+          </lc-empty-state>`;
       case 'ready':
-        element.querySelector('.cl-skeleton')?.remove();
-        render(html`${head(state.from)} ${servingsPanel(state.result)} ${totals(state.result)}`, element);
+        return html`${head(state.from)} ${this.servingsPanel(state.plan, state.result)} ${this.totals(state.result)}`;
     }
-  };
+  }
+}
 
-  const slow = slowFlag(() => draw());
-  void compute();
-  const stop = ctx.query.subscribe(() => void compute());
-  onLeave(element, () => {
-    slow.cancel();
-    stop();
-  });
-  return element;
+View.register(tag, Party);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: Party;
+  }
 }

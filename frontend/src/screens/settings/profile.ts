@@ -1,162 +1,177 @@
 import { LIMITS, type Profile, type ProfilePatch } from '@cellar/contract';
-import { html, nothing, render } from '@lightstart/light/html';
+import type { FormField } from '@lightstart/components/types.js';
+import View from '@lightstart/light';
+import { html, nothing } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
-import { eventText } from '../../app/events.ts';
-import { watch } from '../../app/load.ts';
-import { actionFailed, fieldError, problemText } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { session } from '../../app/controllers/session.ts';
+import { eventText, formValues, valueText } from '../../app/events.ts';
+import { loadState } from '../../app/load.ts';
+import { actionFailed, formErrors, problemText } from '../../app/problems.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { setAppBar } from '../../app/shell.ts';
 import type { ImageUpload } from '../../design-system/cl-image-field.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
 import { segmentedField, switchField } from './parts/fields.ts';
-import { settingsPage } from './parts/frame.ts';
-import { loadFailed } from './parts/load-failed.ts';
-import { openSheet } from './parts/sheet.ts';
+import { settingsFrame, settingsLoad } from './parts/frame.ts';
+import { openSheet, type Sheet } from './parts/sheet.ts';
+import '../../design-system/cl-image-field.ts';
+import '../../design-system/lc/avatar.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/form.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/input.ts';
 
-function changePhoto(save: (patch: ProfilePatch) => Promise<void>): void {
-  let error = '';
-  const sheet = openSheet(text('settings.profile.photoTitle'), () => ({
-    body: html`<cl-image-field
-        purpose="avatar"
-        .change=${async (upload: ImageUpload) => {
-          const form = new FormData();
-          form.append('file', upload.file, 'avatar.webp');
-          form.append('purpose', upload.purpose);
-          form.append('width', String(upload.width));
-          form.append('height', String(upload.height));
-          form.append('thumbhash', upload.thumbhash);
-          try {
-            const image = await call('uploadImage', { body: form });
-            await save({ avatarImageId: image.id });
-            sheet.close();
-          } catch (failure) {
-            if (!(failure instanceof ApiError)) {
-              throw failure;
+export const tag = 'cl-screen-settings-profile';
+
+const PASSWORD_NAMES = ['currentPassword', 'newPassword'];
+
+const PASSWORD_FIELDS: FormField[] = [
+  { name: 'currentPassword', type: 'password', label: text('settings.profile.current') },
+  { name: 'newPassword', type: 'password', label: text('login.newPassword.new') },
+  { name: 'again', type: 'password', label: text('login.newPassword.again') },
+];
+
+class SettingsProfile extends View {
+  readonly me = apiResource('getMe', ['settings']);
+  readonly members = apiResource('listMembers', ['settings']);
+  readonly state = loadState([this.me, this.members]);
+  readonly name = signal<string | null>(null);
+  readonly nameError = signal('');
+
+  connected(): void {
+    this.classList.add('cl-settings');
+    setAppBar({ back: '/more' });
+    this.me.bind(this, {});
+    this.members.bind(this, {});
+  }
+
+  private async save(patch: ProfilePatch): Promise<void> {
+    try {
+      await call('updateMe', { body: patch });
+      if (patch.showPrices !== undefined) {
+        dataChanged('settings', 'shelf', 'stats');
+      } else {
+        dataChanged('settings');
+      }
+      await session.refresh();
+    } catch (error) {
+      if (error instanceof ApiError && patch.name !== undefined && error.code === 'duplicate_name') {
+        if (this.isConnected) {
+          this.nameError.value = problemText(error);
+        }
+        return;
+      }
+      actionFailed(error, () => void this.save(patch));
+    }
+  }
+
+  private saveName(profile: Profile): void {
+    const trimmed = (this.name.value ?? profile.name).trim();
+    this.nameError.value = trimmed.length === 0 ? text('setup.nameMissing') : '';
+    if (this.nameError.value === '' && trimmed !== profile.name) {
+      void this.save({ name: trimmed });
+    }
+  }
+
+  private changePhoto(): void {
+    const photoError = signal('');
+    const sheet: Sheet = openSheet(this, text('settings.profile.photoTitle'), () => ({
+      body: html`<cl-image-field
+          purpose="avatar"
+          .change=${async (upload: ImageUpload) => {
+            const form = new FormData();
+            form.append('file', upload.file, 'avatar.webp');
+            form.append('purpose', upload.purpose);
+            form.append('width', String(upload.width));
+            form.append('height', String(upload.height));
+            form.append('thumbhash', upload.thumbhash);
+            try {
+              const image = await call('uploadImage', { body: form });
+              await this.save({ avatarImageId: image.id });
+              sheet.close();
+            } catch (failure) {
+              if (!(failure instanceof ApiError)) {
+                throw failure;
+              }
+              photoError.value = problemText(failure);
             }
-            error = problemText(failure);
-            sheet.redraw();
+          }}
+        ></cl-image-field>
+        ${photoError.value === '' ? nothing : html`<p class="cl-field-error" role="alert">${photoError.value}</p>`}`,
+      footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>`,
+    }));
+  }
+
+  private changePassword(): void {
+    const fieldValues = signal<Record<string, unknown>>({});
+    const fieldErrors = signal<Record<string, string>>({});
+    const working = signal(false);
+    const submit = async (): Promise<void> => {
+      const current = valueText(fieldValues.peek(), 'currentPassword');
+      const next = valueText(fieldValues.peek(), 'newPassword');
+      const again = valueText(fieldValues.peek(), 'again');
+      const missing: Record<string, string> = {};
+      if (current.length === 0) {
+        missing.currentPassword = text('settings.profile.currentMissing');
+      }
+      if (next.length < LIMITS.password.min) {
+        missing.newPassword = text('setup.weak');
+      } else if (again !== next) {
+        missing.again = text('login.newPassword.mismatch');
+      }
+      fieldErrors.value = missing;
+      if (Object.keys(missing).length > 0) {
+        return;
+      }
+      working.value = true;
+      try {
+        await call('changeMyPassword', { body: { currentPassword: current, newPassword: next } });
+        sheet.close();
+        toast({ title: text('settings.profile.passwordChanged') });
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'validation_failed') {
+          fieldErrors.value = formErrors(error, PASSWORD_NAMES).fields;
+        } else {
+          actionFailed(error, () => void submit());
+        }
+      } finally {
+        working.value = false;
+      }
+    };
+    const sheet: Sheet = openSheet(this, text('settings.profile.changePassword'), () => ({
+      body: html`<lc-form
+        class="cl-settings-form"
+        layout="stacked"
+        .fields=${PASSWORD_FIELDS}
+        .data=${fieldValues.value}
+        .errors=${fieldErrors.value}
+        @field-change=${(event: Event) => {
+          const values = formValues(event);
+          if (values !== null) {
+            fieldValues.value = values;
           }
         }}
-      ></cl-image-field>
-      ${error === '' ? nothing : html`<p class="cl-field-error" role="alert">${error}</p>`}`,
-    footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>`,
-  }));
-}
+        @form-submit=${() => {
+          if (!working.peek()) {
+            void submit();
+          }
+        }}
+      ></lc-form>`,
+      footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
+        <lc-button variant="primary" ?disabled=${working.value} @click=${() => void submit()}
+          >${text('settings.profile.changePassword')}</lc-button
+        >`,
+    }));
+  }
 
-function changePassword(): void {
-  let current = '';
-  let next = '';
-  let again = '';
-  let currentError = '';
-  let nextError = '';
-  let againError = '';
-  let busy = false;
-  const submit = async (): Promise<void> => {
-    currentError = current.length === 0 ? text('settings.profile.currentMissing') : '';
-    nextError = next.length < LIMITS.password.min ? text('setup.weak') : '';
-    againError = nextError === '' && again !== next ? text('login.newPassword.mismatch') : '';
-    if (currentError !== '' || nextError !== '' || againError !== '') {
-      sheet.redraw();
-      return;
-    }
-    busy = true;
-    sheet.redraw();
-    try {
-      await call('changeMyPassword', { body: { currentPassword: current, newPassword: next } });
-      sheet.close();
-      toast({ title: text('settings.profile.passwordChanged') });
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'validation_failed') {
-        currentError = fieldError(error, 'currentPassword');
-        nextError = fieldError(error, 'newPassword');
-      } else {
-        actionFailed(error, () => void submit());
-      }
-    } finally {
-      busy = false;
-    }
-    sheet.redraw();
-  };
-  const field = (label: string, value: string, error: string, autocomplete: string, set: (value: string) => void) =>
-    html`<lc-input
-      label=${label}
-      type="password"
-      autocomplete=${autocomplete}
-      .value=${value}
-      error-message=${error}
-      @input=${(event: Event) => set(eventText(event))}
-    ></lc-input>`;
-  const sheet = openSheet(text('settings.profile.changePassword'), () => ({
-    body: html`<form
-      id="cl-password-form"
-      class="cl-sheet-form"
-      novalidate
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
-        if (!busy) {
-          void submit();
-        }
-      }}
-    >
-      ${field(text('settings.profile.current'), current, currentError, 'current-password', (value) => {
-        current = value;
-      })}
-      ${field(text('login.newPassword.new'), next, nextError, 'new-password', (value) => {
-        next = value;
-      })}
-      ${field(text('login.newPassword.again'), again, againError, 'new-password', (value) => {
-        again = value;
-      })}
-    </form>`,
-    footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
-      <lc-button variant="primary" ?disabled=${busy} @click=${() => void submit()}
-        >${text('settings.profile.changePassword')}</lc-button
-      >`,
-  }));
-}
-
-export function screen(ctx: ScreenContext): HTMLElement {
-  return settingsPage(ctx, 'profile', (main) => {
-    const me = resourceFor('getMe', {}, { tags: ['settings'] });
-    const members = resourceFor('listMembers', {}, { tags: ['settings'] });
-    let name: string | null = null;
-    let nameError = '';
-
-    const save = async (patch: ProfilePatch): Promise<void> => {
-      try {
-        await call('updateMe', { body: patch });
-        if (patch.showPrices !== undefined) {
-          invalidate('settings', 'shelf', 'stats');
-        } else {
-          invalidate('settings');
-        }
-        await ctx.person.refresh();
-      } catch (error) {
-        if (error instanceof ApiError && patch.name !== undefined && error.code === 'duplicate_name') {
-          nameError = problemText(error);
-          redraw();
-          return;
-        }
-        actionFailed(error, () => void save(patch));
-      }
-    };
-
-    const saveName = (profile: Profile): void => {
-      const trimmed = (name ?? profile.name).trim();
-      nameError = trimmed.length === 0 ? text('setup.nameMissing') : '';
-      if (nameError === '' && trimmed !== profile.name) {
-        void save({ name: trimmed });
-      }
-      redraw();
-    };
-
-    const view = (profile: Profile) => html`<section class="cl-sgroup" aria-labelledby="settings-profile">
+  private view(profile: Profile) {
+    return html`<section class="cl-sgroup" aria-labelledby="settings-profile">
       <h2 id="settings-profile">${text('settings.profile')}</h2>
       <div class="cl-profile-photo">
         <lc-avatar shape="rounded" size="xl" name=${profile.name} src=${profile.avatar?.url ?? nothing}></lc-avatar>
-        <lc-button variant="quiet" @click=${() => changePhoto(save)}>
+        <lc-button variant="quiet" @click=${() => this.changePhoto()}>
           <lc-icon name="image" aria-hidden="true"></lc-icon>${text('settings.profile.changePhoto')}
         </lc-button>
       </div>
@@ -164,12 +179,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
         <lc-input
           label=${text('settings.profile.name')}
           autocomplete="nickname"
-          .value=${name ?? profile.name}
-          error-message=${nameError}
+          .value=${this.name.value ?? profile.name}
+          error-message=${this.nameError.value}
           @input=${(event: Event) => {
-            name = eventText(event);
+            this.name.value = eventText(event);
           }}
-          @change=${() => saveName(profile)}
+          @change=${() => this.saveName(profile)}
         ></lc-input>
         ${segmentedField(
           text('settings.profile.units'),
@@ -178,7 +193,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
             { value: 'ml', label: text('settings.profile.ml') },
           ],
           profile.unit,
-          (unit) => void save({ unit: unit === 'ml' ? 'ml' : 'oz' }),
+          (unit) => void this.save({ unit: unit === 'ml' ? 'ml' : 'oz' }),
         )}
         ${segmentedField(
           text('settings.profile.visibility'),
@@ -187,7 +202,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
             { value: 'private', label: text('settings.profile.private') },
           ],
           profile.defaultVisibility,
-          (visibility) => void save({ defaultVisibility: visibility === 'private' ? 'private' : 'household' }),
+          (visibility) => void this.save({ defaultVisibility: visibility === 'private' ? 'private' : 'household' }),
         )}
       </div>
       ${switchField(
@@ -195,24 +210,31 @@ export function screen(ctx: ScreenContext): HTMLElement {
         text('settings.profile.pricesBody'),
         profile.showPrices,
         (showPrices) => {
-          void save({ showPrices });
+          void this.save({ showPrices });
         },
       )}
       <div class="cl-srow">
         <span class="cl-srow-text"><b>${text('settings.profile.password')}</b></span>
-        <lc-button variant="quiet" @click=${changePassword}>${text('settings.profile.changePassword')}</lc-button>
+        <lc-button variant="quiet" @click=${() => this.changePassword()}>${text('settings.profile.changePassword')}</lc-button>
       </div>
     </section>`;
+  }
 
-    const { redraw } = watch(main, [me, members], ({ phase, retry }) => {
-      const profile = me.peek();
-      if (phase === 'failed') {
-        render(loadFailed(text('settings.profile'), retry), main);
-      } else if (phase === 'slow') {
-        render(skeleton('lines', text('settings.profile')), main);
-      } else if (phase === 'ready' && profile !== undefined) {
-        render(view(profile), main);
-      }
+  render() {
+    return settingsFrame('profile', () => {
+      const profile = this.me.value.value;
+      return (
+        settingsLoad(this.state, text('settings.profile'), 'lines') ??
+        (profile === undefined ? nothing : this.view(profile))
+      );
     });
-  });
+  }
+}
+
+View.register(tag, SettingsProfile);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsProfile;
+  }
 }

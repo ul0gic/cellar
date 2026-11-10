@@ -1,24 +1,32 @@
 import type { DropdownItem } from '@lightstart/components/types.js';
 import { html, nothing } from '@lightstart/light/html';
+import { viewport } from '../../../app/controllers/viewport.ts';
+import type { OverlayHost } from '../../../app/types.ts';
+import { hostOverlay } from '../../../design-system/overlay.ts';
+import '../../../design-system/lc/dropdown.ts';
+import '../../../design-system/lc/icon.ts';
 import { openSheet } from './sheet.ts';
 
-const WIDE = matchMedia('(min-width: 1024px)');
-
-export function isWide(): boolean {
-  return WIDE.matches;
-}
-
-export function openActions(trigger: Element, heading: string, items: readonly DropdownItem[]): void {
-  if (WIDE.matches) {
+export function openActions(
+  host: OverlayHost,
+  trigger: Element,
+  heading: string,
+  items: readonly DropdownItem[],
+): void {
+  if (viewport.wide.peek()) {
     const menu = document.createElement('lc-dropdown');
     menu.className = 'cl-actions-menu';
     menu.items = [...items];
-    menu.addEventListener('popover-close', () => menu.remove(), { once: true });
-    document.body.append(menu);
-    requestAnimationFrame(() => menu.toggle(trigger));
+    const end = hostOverlay(host, menu);
+    menu.addEventListener('popover-close', end, { once: true });
+    requestAnimationFrame(() => {
+      if (menu.isConnected) {
+        menu.toggle(trigger);
+      }
+    });
     return;
   }
-  const sheet = openSheet({
+  const sheet = openSheet(host, {
     heading: () => heading,
     body: () => html`<div class="cl-action-sheet" role="menu" aria-label=${heading}>
       ${items.map((item) =>

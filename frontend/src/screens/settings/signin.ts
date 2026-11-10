@@ -1,127 +1,148 @@
 import type { HouseholdSettings, SettingsPatch } from '@cellar/contract';
-import { html, render } from '@lightstart/light/html';
+import type { FormField, FormTypeHandlers } from '@lightstart/components/types.js';
+import View from '@lightstart/light';
+import { html, nothing } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
-import { eventText } from '../../app/events.ts';
-import { watch } from '../../app/load.ts';
+import { session } from '../../app/controllers/session.ts';
+import { eventText, formValues, valueText } from '../../app/events.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed, problemText } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import type { ScreenContext } from '../../app/types.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { setAppBar } from '../../app/shell.ts';
 import { text } from '../../text/index.ts';
 import { segmentedField, switchField } from './parts/fields.ts';
-import { settingsPage } from './parts/frame.ts';
-import { loadFailed } from './parts/load-failed.ts';
-import { openSheet } from './parts/sheet.ts';
+import { settingsFrame, settingsLoad, settingsReadable } from './parts/frame.ts';
+import { openSheet, type Sheet } from './parts/sheet.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/form.ts';
+import '../../design-system/lc/input.ts';
+
+export const tag = 'cl-screen-settings-signin';
 
 const CURRENCY = /^[A-Z]{3}$/;
+const LEAD_TYPE = 'settings-lead';
 
-function confirmRequireLogin(on: boolean, done: (changed: boolean) => void, refresh: () => Promise<void>): void {
-  let password = '';
-  let error = '';
-  let busy = false;
-  let changed = false;
-  const submit = async (): Promise<void> => {
-    error = password.length === 0 ? text('settings.signin.passwordMissing') : '';
-    if (error !== '') {
-      sheet.redraw();
-      return;
+const PASSWORD_FIELD: FormField = {
+  name: 'ownerPassword',
+  type: 'password',
+  label: text('settings.signin.yourPassword'),
+};
+
+class SettingsSignin extends View {
+  readonly settings = apiResource('getSettings', ['settings']);
+  readonly state = loadState([this.settings]);
+  readonly currency = signal<string | null>(null);
+  readonly currencyError = signal('');
+
+  connected(): void {
+    this.classList.add('cl-settings');
+    setAppBar({ back: '/more' });
+    if (settingsReadable('signin')) {
+      this.settings.bind(this, {});
     }
-    busy = true;
-    sheet.redraw();
+  }
+
+  private async save(patch: SettingsPatch): Promise<void> {
     try {
-      await call('setRequireLogin', { body: { requireLogin: on, ownerPassword: password } });
-      changed = true;
-      invalidate('settings');
-      await refresh();
-      sheet.close();
-    } catch (failure) {
-      if (failure instanceof ApiError && failure.code === 'validation_failed') {
-        error = text('settings.signin.wrongPassword');
-      } else if (failure instanceof ApiError && failure.code === 'require_login_blocked') {
-        error = problemText(failure);
-      } else {
-        actionFailed(failure, () => void submit());
-      }
-    } finally {
-      busy = false;
+      await call('updateSettings', { body: patch });
+      dataChanged('settings', 'shelf', 'stats');
+      await session.refresh();
+    } catch (error) {
+      actionFailed(error, () => void this.save(patch));
     }
-    sheet.redraw();
-  };
-  const sheet = openSheet(
-    on ? text('settings.signin.onTitle') : text('settings.signin.offTitle'),
-    () => ({
-      body: html`<form
-      class="cl-sheet-form"
-      novalidate
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
-        if (!busy) {
-          void submit();
-        }
-      }}
-    >
-      <p class="cl-muted">${on ? text('settings.signin.onBody') : text('settings.signin.offBody')}</p>
-      <lc-input
-        label=${text('settings.signin.yourPassword')}
-        type="password"
-        autocomplete="current-password"
-        .value=${password}
-        error-message=${error}
-        @input=${(event: Event) => {
-          password = eventText(event);
-        }}
-      ></lc-input>
-    </form>`,
-      footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
-      <lc-button variant=${on ? 'primary' : 'danger'} ?disabled=${busy} @click=${() => void submit()}
-        >${on ? text('settings.signin.onConfirm') : text('settings.signin.offConfirm')}</lc-button
-      >`,
-    }),
-    () => done(changed),
-  );
-}
+  }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  return settingsPage(ctx, 'signin', (main) => {
-    const settings = resourceFor('getSettings', {}, { tags: ['settings'] });
-    let currency: string | null = null;
-    let currencyError = '';
+  private saveCurrency(current: HouseholdSettings): void {
+    const next = (this.currency.value ?? current.currency).trim().toUpperCase();
+    this.currencyError.value = CURRENCY.test(next) ? '' : text('settings.signin.currencyInvalid');
+    if (this.currencyError.value === '' && next !== current.currency) {
+      void this.save({ currency: next });
+    }
+  }
 
-    const save = async (patch: SettingsPatch): Promise<void> => {
+  private confirmRequireLogin(on: boolean, revert: () => void): void {
+    const fieldValues = signal<Record<string, unknown>>({});
+    const fieldErrors = signal<Record<string, string>>({});
+    const working = signal(false);
+    const applied = signal(false);
+    const submit = async (): Promise<void> => {
+      const password = valueText(fieldValues.peek(), 'ownerPassword');
+      if (password.length === 0) {
+        fieldErrors.value = { ownerPassword: text('settings.signin.passwordMissing') };
+        return;
+      }
+      fieldErrors.value = {};
+      working.value = true;
       try {
-        await call('updateSettings', { body: patch });
-        invalidate('settings', 'shelf', 'stats');
-        await ctx.person.refresh();
-      } catch (error) {
-        actionFailed(error, () => void save(patch));
+        await call('setRequireLogin', { body: { requireLogin: on, ownerPassword: password } });
+        applied.value = true;
+        dataChanged('settings');
+        await session.refresh();
+        sheet.close();
+      } catch (failure) {
+        if (failure instanceof ApiError && failure.code === 'validation_failed') {
+          fieldErrors.value = { ownerPassword: text('settings.signin.wrongPassword') };
+        } else if (failure instanceof ApiError && failure.code === 'require_login_blocked') {
+          fieldErrors.value = { ownerPassword: problemText(failure) };
+        } else {
+          actionFailed(failure, () => void submit());
+        }
+      } finally {
+        working.value = false;
       }
     };
-
-    const saveCurrency = (current: HouseholdSettings): void => {
-      const next = (currency ?? current.currency).trim().toUpperCase();
-      currencyError = CURRENCY.test(next) ? '' : text('settings.signin.currencyInvalid');
-      if (currencyError === '' && next !== current.currency) {
-        void save({ currency: next });
-      }
-      redraw();
+    const fields: FormField[] = [{ name: 'lead', type: LEAD_TYPE }, PASSWORD_FIELD];
+    const handlers: FormTypeHandlers = {
+      [LEAD_TYPE]: {
+        render: () =>
+          html`<p class="cl-muted">${on ? text('settings.signin.onBody') : text('settings.signin.offBody')}</p>`,
+      },
     };
+    const sheet: Sheet = openSheet(
+      this,
+      on ? text('settings.signin.onTitle') : text('settings.signin.offTitle'),
+      () => ({
+        body: html`<lc-form
+          class="cl-settings-form"
+          layout="stacked"
+          .fields=${fields}
+          .typeHandlers=${handlers}
+          .data=${fieldValues.value}
+          .errors=${fieldErrors.value}
+          @field-change=${(event: Event) => {
+            const values = formValues(event);
+            if (values !== null) {
+              fieldValues.value = values;
+            }
+          }}
+          @form-submit=${() => {
+            if (!working.peek()) {
+              void submit();
+            }
+          }}
+        ></lc-form>`,
+        footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
+          <lc-button variant=${on ? 'primary' : 'danger'} ?disabled=${working.value} @click=${() => void submit()}
+            >${on ? text('settings.signin.onConfirm') : text('settings.signin.offConfirm')}</lc-button
+          >`,
+      }),
+      () => {
+        if (!applied.peek()) {
+          revert();
+        }
+      },
+    );
+  }
 
-    const view = (current: HouseholdSettings) => html`<section class="cl-sgroup" aria-labelledby="settings-signin">
+  private view(current: HouseholdSettings) {
+    return html`<section class="cl-sgroup" aria-labelledby="settings-signin">
         <h2 id="settings-signin">${text('settings.signin')}</h2>
         ${switchField(
           text('settings.signin.require'),
           current.requireLogin ? text('settings.signin.onState') : text('settings.signin.offState'),
           current.requireLogin,
-          (checked, revert) =>
-            confirmRequireLogin(
-              checked,
-              (changed) => {
-                if (!changed) {
-                  revert();
-                }
-              },
-              () => ctx.person.refresh(),
-            ),
+          (checked, revert) => this.confirmRequireLogin(checked, revert),
         )}
       </section>
       <section class="cl-sgroup" aria-labelledby="settings-household">
@@ -131,13 +152,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
             <lc-input
               label=${text('settings.signin.currency')}
               autocapitalize="characters"
-              .value=${currency ?? current.currency}
-              error-message=${currencyError}
+              .value=${this.currency.value ?? current.currency}
+              error-message=${this.currencyError.value}
               hint=${text('settings.signin.currencyHint')}
               @input=${(event: Event) => {
-                currency = eventText(event);
+                this.currency.value = eventText(event);
               }}
-              @change=${() => saveCurrency(current)}
+              @change=${() => this.saveCurrency(current)}
             ></lc-input>
           </div>
           ${segmentedField(
@@ -147,20 +168,27 @@ export function screen(ctx: ScreenContext): HTMLElement {
               { value: 'ml', label: text('settings.profile.ml') },
             ],
             current.displayUnit,
-            (unit) => void save({ displayUnit: unit === 'ml' ? 'ml' : 'oz' }),
+            (unit) => void this.save({ displayUnit: unit === 'ml' ? 'ml' : 'oz' }),
           )}
         </div>
       </section>`;
+  }
 
-    const { redraw } = watch(main, [settings], ({ phase, retry }) => {
-      const current = settings.peek();
-      if (phase === 'failed') {
-        render(loadFailed(text('settings.signin'), retry), main);
-      } else if (phase === 'slow') {
-        render(skeleton('lines', text('settings.signin')), main);
-      } else if (phase === 'ready' && current !== undefined) {
-        render(view(current), main);
-      }
+  render() {
+    return settingsFrame('signin', () => {
+      const current = this.settings.value.value;
+      return (
+        settingsLoad(this.state, text('settings.signin'), 'lines') ??
+        (current === undefined ? nothing : this.view(current))
+      );
     });
-  });
+  }
+}
+
+View.register(tag, SettingsSignin);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsSignin;
+  }
 }

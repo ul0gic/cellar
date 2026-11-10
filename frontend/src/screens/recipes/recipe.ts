@@ -1,17 +1,21 @@
 import { formatAbv, formatVolume, type PreferredUnit, type Recipe, type RecipeLine } from '@cellar/contract';
 import type { DropdownItem } from '@lightstart/components/types.js';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal } from '@lightstart/light/signals';
 import { call } from '../../app/api.ts';
+import { route } from '../../app/controllers/route.ts';
+import { session } from '../../app/controllers/session.ts';
 import { eventChecked, eventNumber, eventText } from '../../app/events.ts';
-import { type WatchState, onLeave, watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import { href, setScreenTitle } from '../../app/router.ts';
-import type { ScreenContext, SessionPerson } from '../../app/types.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { href, navigate, setQuery, setScreenTitle } from '../../app/router.ts';
+import type { RouteParams, SessionPerson } from '../../app/types.ts';
 import type { BulbStatus } from '../../design-system/cl-bulb.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
 import { confirm } from '../../design-system/dialogs.ts';
-import { illustration } from '../../design-system/illustration.ts';
+import { loadFailed } from '../../design-system/load-view.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
@@ -26,18 +30,30 @@ import { ratingControl } from './parts/rating.ts';
 import { SERVINGS_MAX, servingsOf } from './parts/servings.ts';
 import { undoAdded } from './parts/shopping-undo.ts';
 import { methodSteps } from './parts/steps.ts';
-import { triggerOf } from './parts/view.ts';
+import { notFound, triggerOf } from './parts/view.ts';
+import '../../design-system/cl-bulb.ts';
+import '../../design-system/cl-ingredient-line.ts';
+import '../../design-system/lc/avatar.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/image.ts';
+import '../../design-system/lc/number-input.ts';
+import '../../design-system/lc/segmented.ts';
+import '../../design-system/lc/switch.ts';
+import '../../design-system/lc/tag.ts';
 import './recipe.css';
+
+export const tag = 'cl-screen-recipes-recipe';
 
 // D-1 §9.5: eight notes show before "Show all".
 const NOTES_SHOWN = 8;
 const NOTES_ALL = 100;
 
-function unitOf(raw: string | null, session: SessionPerson | null): PreferredUnit {
+function unitOf(raw: string | null, person: SessionPerson | null): PreferredUnit {
   if (raw === 'oz' || raw === 'ml') {
     return raw;
   }
-  return session?.person.unit ?? 'oz';
+  return person?.person.unit ?? 'oz';
 }
 
 function lineBulb(line: RecipeLine): BulbStatus {
@@ -130,7 +146,7 @@ function details(recipe: Recipe): TemplateResult {
   if (recipe.tags.length > 0) {
     rows.push([
       text('recipes.detailTags'),
-      html`<span class="cl-recipe-tags">${recipe.tags.map((tag) => html`<lc-tag size="sm">${tag.name}</lc-tag>`)}</span>`,
+      html`<span class="cl-recipe-tags">${recipe.tags.map((chip) => html`<lc-tag size="sm">${chip.name}</lc-tag>`)}</span>`,
     ]);
   }
   if (recipe.year !== null) {
@@ -192,106 +208,205 @@ function method(recipe: Recipe): TemplateResult {
   </section>`;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('article');
-  element.className = 'cl-recipe-screen';
-  const id = Number(ctx.params.id);
-  const notFound = (bookSize: number | null = null): void => {
-    render(
-      html`<lc-empty-state
-        title=${text('recipes.notFoundTitle')}
-        description=${bookSize === null ? text('recipes.notFoundBody') : text(bookSize === 1 ? 'recipes.notFoundCountOne' : 'recipes.notFoundCount', { count: bookSize })}
-      >
-        ${illustration('empty-lost')}
-        <lc-button variant="primary" href=${href('/recipes')}>${text('recipes.backToRecipes')}</lc-button>
-      </lc-empty-state>`,
-      element,
-    );
-  };
-  if (!Number.isSafeInteger(id) || id < 1) {
-    notFound();
-    return element;
+const WAKE_SUPPORTED = 'wakeLock' in navigator && window.isSecureContext;
+
+function printPath(id: number, servings: number, unit: PreferredUnit): string {
+  return `/recipes/${id}/print?servings=${servings}&unit=${unit}`;
+}
+
+function statusWell(current: Recipe): TemplateResult {
+  return html`<div class="cl-recipe-status">
+    <p class="cl-recipe-status-word">
+      ${current.canMake ? text('recipes.ready') : text('recipes.missingN', { count: current.missingCount })}
+    </p>
+    <span class="cl-recipe-bulbs" aria-hidden="true">
+      ${current.lines.map((line) => html`<cl-bulb size="mini" status=${lineBulb(line)}></cl-bulb>`)}
+    </span>
+    <p class="cl-recipe-status-text">${statusSummary(current)}</p>
+  </div>`;
+}
+
+function servingsRow(servings: number, unit: PreferredUnit): TemplateResult {
+  return html`<div class="cl-recipe-servings">
+      <lc-number-input
+        stepper
+        label=${text('recipes.servings')}
+        min="1"
+        max=${SERVINGS_MAX}
+        .value=${servings}
+        @change=${(event: Event) => {
+          const next = eventNumber(event);
+          if (next !== null) {
+            const clamped = servingsOf(String(next));
+            setQuery({ servings: clamped === 1 ? null : String(clamped) }, 'replace');
+          }
+        }}
+      ></lc-number-input>
+      <lc-segmented
+        label=${text('recipes.units')}
+        value=${unit}
+        .options=${[{ value: 'oz', label: 'oz' }, { value: 'ml', label: 'ml' }]}
+        @change=${(event: Event) => setQuery({ unit: eventText(event) || null }, 'replace')}
+      ></lc-segmented>
+    </div>
+    ${servings === 1 ? nothing : html`<p class="cl-recipe-scaled" role="status">${text('recipes.scaled', { count: servings })}</p>`}`;
+}
+
+function madeButton(onMade: () => void): TemplateResult {
+  return html`<lc-button variant="quiet" @click=${onMade}>
+    <lc-icon name="check" aria-hidden="true"></lc-icon>${text('recipes.madeItButton')}
+  </lc-button>`;
+}
+
+class RecipesRecipe extends View {
+  params: RouteParams = {};
+  readonly wakeWanted = signal(true);
+  readonly wakeRefused = signal(false);
+  readonly visible = signal(document.visibilityState === 'visible');
+  readonly notesAll = signal(false);
+  readonly others = signal<number | null>(null);
+  readonly recipe = apiResource('getRecipe', ['recipes', 'shelf', 'notes', 'collections']);
+  readonly shopping = apiResource('getShoppingList', ['shopping']);
+  readonly notes = apiResource('listRecipeNotes', ['notes']);
+  readonly load = loadState([this.recipe]);
+  wakeLock: WakeLockSentinel | null = null;
+
+  get recipeId(): number {
+    return Number(this.params.id);
   }
 
-  const recipe = resourceFor('getRecipe', { params: { id } }, { tags: ['recipes', 'shelf', 'notes', 'collections'] });
-  const shopping = resourceFor('getShoppingList', {}, { tags: ['shopping'] });
-  let others: number | null = null;
-  let notes = resourceFor('listRecipeNotes', { params: { id }, query: { pageSize: NOTES_SHOWN } }, { tags: ['notes'] });
-  let wakeLock: WakeLockSentinel | null = null;
-  let wakeWanted = true;
-  let wakeRefused = false;
-  const wakeSupported = 'wakeLock' in navigator && window.isSecureContext;
+  get valid(): boolean {
+    return Number.isSafeInteger(this.recipeId) && this.recipeId >= 1;
+  }
 
-  const acquireWake = async (): Promise<void> => {
-    if (!wakeSupported || !wakeWanted || wakeLock !== null || document.visibilityState !== 'visible') {
+  connected(): void {
+    this.classList.add('cl-recipe-screen');
+    this.setAttribute('role', 'article');
+    if (!this.valid) {
+      return;
+    }
+    this.recipe.bind(this, { params: { id: this.recipeId } });
+    this.shopping.bind(this, {});
+    this.notes.bind(this, () => ({
+      params: { id: this.recipeId },
+      query: { pageSize: this.notesAll.value ? NOTES_ALL : NOTES_SHOWN },
+    }));
+    const title = effect(() => {
+      const current = this.recipe.value.value;
+      if (current !== undefined) {
+        setScreenTitle(current.name);
+      }
+    });
+    this.$own(() => title.dispose());
+    const missing = effect(() => {
+      if (this.load.error.value?.code === 'not_found' && this.others.peek() === null) {
+        void this.countOthers();
+      }
+    });
+    this.$own(() => missing.dispose());
+    const onVisible = (): void => {
+      this.visible.value = document.visibilityState === 'visible';
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    this.$own(() => document.removeEventListener('visibilitychange', onVisible));
+    const wake = effect(() => {
+      if (this.wakeWanted.value && this.visible.value) {
+        void this.acquireWake();
+      } else {
+        void this.releaseWake();
+      }
+    });
+    this.$own(() => wake.dispose());
+    this.$own(() => void this.releaseWake());
+  }
+
+  async acquireWake(): Promise<void> {
+    if (!WAKE_SUPPORTED || this.wakeLock !== null) {
       return;
     }
     try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      wakeLock.addEventListener('release', () => {
-        wakeLock = null;
+      const lock = await navigator.wakeLock.request('screen');
+      if (!this.isConnected || !this.wakeWanted.peek() || this.wakeLock !== null) {
+        await lock.release();
+        return;
+      }
+      this.wakeLock = lock;
+      lock.addEventListener('release', () => {
+        if (this.wakeLock === lock) {
+          this.wakeLock = null;
+        }
       });
     } catch (error) {
       if (!(error instanceof DOMException)) {
         throw error;
       }
-      wakeWanted = false;
-      wakeRefused = true;
-      draw();
+      if (this.isConnected) {
+        this.wakeWanted.value = false;
+        this.wakeRefused.value = true;
+      }
     }
-  };
+  }
 
-  const releaseWake = async (): Promise<void> => {
-    const held = wakeLock;
-    wakeLock = null;
+  async releaseWake(): Promise<void> {
+    const held = this.wakeLock;
+    this.wakeLock = null;
     await held?.release();
-  };
+  }
 
-  const onVisible = (): void => void acquireWake();
+  async countOthers(): Promise<void> {
+    try {
+      const page = await call('listRecipes', { query: { pageSize: 1 } });
+      if (this.isConnected) {
+        this.others.value = page.facets.all;
+      }
+    } catch (error) {
+      actionFailed(error, () => void this.countOthers());
+    }
+  }
 
-  let loadState: WatchState | null = null;
-
-  const toggleFavorite = async (current: Recipe): Promise<void> => {
+  async toggleFavorite(current: Recipe): Promise<void> {
     try {
       await (current.mine.favorite
-        ? call('unfavoriteRecipe', { params: { id } })
-        : call('favoriteRecipe', { params: { id } }));
-      invalidate('recipes');
+        ? call('unfavoriteRecipe', { params: { id: this.recipeId } })
+        : call('favoriteRecipe', { params: { id: this.recipeId } }));
+      dataChanged('recipes');
     } catch (error) {
-      actionFailed(error, () => void toggleFavorite(current));
+      actionFailed(error, () => void this.toggleFavorite(current));
     }
-  };
+  }
 
-  const undoMadeIt = async (entryId: number): Promise<void> => {
+  async undoMadeIt(entryId: number): Promise<void> {
     try {
       await call('undoMadeIt', { params: { entryId } });
-      invalidate('recipes', 'stats');
+      dataChanged('recipes', 'stats');
       toast({ title: text('toast.undone') });
     } catch (error) {
-      actionFailed(error, () => void undoMadeIt(entryId));
+      actionFailed(error, () => void this.undoMadeIt(entryId));
     }
-  };
+  }
 
-  const madeIt = async (): Promise<void> => {
+  async madeIt(): Promise<void> {
     try {
-      const state = await call('recordMadeIt', { params: { id } });
-      invalidate('recipes', 'stats');
+      const state = await call('recordMadeIt', { params: { id: this.recipeId } });
+      dataChanged('recipes', 'stats');
       const entryId = state.entryId;
       toast({
         title: text(state.mine.count === 1 ? 'recipes.madeItOnce' : 'recipes.madeIt', { count: state.mine.count }),
-        ...(entryId === null ? {} : { action: { label: text('toast.undo'), run: () => void undoMadeIt(entryId) } }),
+        ...(entryId === null
+          ? {}
+          : { action: { label: text('toast.undo'), run: () => void this.undoMadeIt(entryId) } }),
       });
     } catch (error) {
-      actionFailed(error, () => void madeIt());
+      actionFailed(error, () => void this.madeIt());
     }
-  };
+  }
 
-  const addMissing = async (): Promise<void> => {
+  async addMissing(): Promise<void> {
     try {
       const before = await call('getShoppingList', {});
       const listed = new Set(before.items.map((item) => item.ingredient.id));
-      const change = await call('addMissingToShoppingList', { params: { id } });
-      invalidate('shopping');
+      const change = await call('addMissingToShoppingList', { params: { id: this.recipeId } });
+      dataChanged('shopping');
       if (change.added === 0) {
         toast({ title: text('recipes.alreadyListed') });
         return;
@@ -303,12 +418,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
         action: { label: text('toast.undo'), run: () => void undoAdded(added.map((item) => item.id)) },
       });
     } catch (error) {
-      actionFailed(error, () => void addMissing());
+      actionFailed(error, () => void this.addMissing());
     }
-  };
+  }
 
-  const remove = async (current: Recipe): Promise<void> => {
-    const sure = await confirm({
+  async deleteRecipe(current: Recipe): Promise<void> {
+    const sure = await confirm(this, {
       title: text('recipes.deleteTitle', { name: current.name }),
       message: text('recipes.deleteBody'),
       confirmLabel: text('recipes.deleteRecipe'),
@@ -318,93 +433,102 @@ export function screen(ctx: ScreenContext): HTMLElement {
       return;
     }
     try {
-      await call('deleteRecipe', { params: { id } });
-      invalidate('recipes', 'collections', 'menus', 'stats');
-      ctx.navigate('/recipes', { replace: true });
+      await call('deleteRecipe', { params: { id: this.recipeId } });
+      this.recipe.release();
+      this.notes.release();
+      dataChanged('recipes', 'collections', 'menus', 'stats');
+      if (this.isConnected) {
+        navigate('/recipes', { replace: true });
+      }
       toast({ title: text('toast.deleted') });
     } catch (error) {
-      actionFailed(error, () => void remove(current));
+      actionFailed(error, () => void this.deleteRecipe(current));
     }
-  };
+  }
 
-  const printPath = (servings: number, unit: PreferredUnit): string =>
-    `/recipes/${id}/print?servings=${servings}&unit=${unit}`;
-
-  const moreItems = (
-    current: Recipe,
-    session: SessionPerson,
-    servings: number,
-    unit: PreferredUnit,
-  ): DropdownItem[] => {
-    const ai = session.household.aiEnabled;
+  moreItems(current: Recipe, person: SessionPerson, servings: number, unit: PreferredUnit): DropdownItem[] {
+    const ai = person.household.aiEnabled;
     return [
-      { label: text('recipes.editRecipe'), icon: 'pencil', onClick: () => ctx.navigate(`/recipes/${id}/edit`) },
+      { label: text('recipes.editRecipe'), icon: 'pencil', onClick: () => navigate(`/recipes/${this.recipeId}/edit`) },
       {
         label: text('recipes.addToCollection'),
         icon: 'folder-heart',
-        onClick: () => void openCollectionSheet(current),
+        onClick: () => void openCollectionSheet(this, current),
       },
-      { label: text('recipes.addToMenu'), icon: 'tv', onClick: () => void openMenuSheet(current) },
-      { label: text('recipes.print'), icon: 'printer', onClick: () => ctx.navigate(printPath(servings, unit)) },
+      { label: text('recipes.addToMenu'), icon: 'tv', onClick: () => void openMenuSheet(this, current) },
+      {
+        label: text('recipes.print'),
+        icon: 'printer',
+        onClick: () => navigate(printPath(this.recipeId, servings, unit)),
+      },
       ...(ai
         ? [
             { divider: true },
-            { label: text('recipes.lookUpHistory'), icon: 'sparkles', onClick: () => openHistorySheet(current) },
-            { label: text('recipes.generatePhoto'), icon: 'sparkles', onClick: () => openPhotoSheet(current) },
+            { label: text('recipes.lookUpHistory'), icon: 'sparkles', onClick: () => openHistorySheet(this, current) },
+            { label: text('recipes.generatePhoto'), icon: 'sparkles', onClick: () => openPhotoSheet(this, current) },
           ]
         : []),
       { divider: true },
-      { label: text('recipes.deleteRecipe'), icon: 'trash-2', danger: true, onClick: () => void remove(current) },
+      {
+        label: text('recipes.deleteRecipe'),
+        icon: 'trash-2',
+        danger: true,
+        onClick: () => void this.deleteRecipe(current),
+      },
     ];
-  };
+  }
 
-  const setOnHand = async (line: RecipeLine, marked: boolean): Promise<void> => {
+  async setOnHand(line: RecipeLine, marked: boolean): Promise<void> {
     try {
       await call('setOnHand', { params: { id: line.ingredient.id }, body: { marked } });
-      invalidate('shelf', 'recipes');
+      dataChanged('shelf', 'recipes');
     } catch (error) {
-      actionFailed(error, () => void setOnHand(line, marked));
+      actionFailed(error, () => void this.setOnHand(line, marked));
     }
-  };
+  }
 
-  const listIngredient = async (line: RecipeLine): Promise<void> => {
+  async listIngredient(line: RecipeLine): Promise<void> {
     try {
       await call('addIngredientToShoppingList', { params: { id: line.ingredient.id } });
-      invalidate('shopping');
+      dataChanged('shopping');
       toast({ title: text('recipes.addedToList', { names: line.ingredient.name }) });
     } catch (error) {
-      actionFailed(error, () => void listIngredient(line));
+      actionFailed(error, () => void this.listIngredient(line));
     }
-  };
+  }
 
-  const lineMenu = (trigger: Element, line: RecipeLine): void => {
+  lineMenu(trigger: Element, line: RecipeLine): void {
     const name = line.ingredient.name;
-    const listed = shopping.peek()?.items.some((item) => item.ingredient.id === line.ingredient.id) ?? false;
-    openActions(trigger, name, [
+    const listed = this.shopping.value.peek()?.items.some((item) => item.ingredient.id === line.ingredient.id) ?? false;
+    openActions(this, trigger, name, [
       line.ingredient.onHand
-        ? { label: text('recipes.markOff', { name }), icon: 'circle-x', onClick: () => void setOnHand(line, false) }
+        ? {
+            label: text('recipes.markOff', { name }),
+            icon: 'circle-x',
+            onClick: () => void this.setOnHand(line, false),
+          }
         : {
             label: text('recipes.markOn', { name }),
             icon: 'circle-check',
-            onClick: () => void setOnHand(line, true),
+            onClick: () => void this.setOnHand(line, true),
           },
       listed
         ? { label: text('recipes.onTheList'), icon: 'list-checks', disabled: true }
-        : { label: text('recipes.addToList'), icon: 'plus', onClick: () => void listIngredient(line) },
+        : { label: text('recipes.addToList'), icon: 'plus', onClick: () => void this.listIngredient(line) },
       {
         label: text('recipes.openIngredient', { name }),
         icon: 'citrus',
-        onClick: () => ctx.navigate(`/ingredients/${line.ingredient.id}`),
+        onClick: () => navigate(`/ingredients/${line.ingredient.id}`),
       },
     ]);
-  };
+  }
 
-  const notesSection = (current: Recipe, session: SessionPerson): TemplateResult => {
-    const page = notes.peek();
+  notesSection(current: Recipe, person: SessionPerson): TemplateResult {
+    const page = this.notes.value.value;
     return html`<section class="cl-recipe-section" aria-labelledby="cl-recipe-notes">
       <div class="cl-recipe-section-head">
         <h2 id="cl-recipe-notes" class="cl-recipe-heading">${text('recipes.notes')}</h2>
-        <lc-button variant="ghost" @click=${() => void openNoteSheet(current, session)}>
+        <lc-button variant="ghost" @click=${() => void openNoteSheet(this, current, person)}>
           <lc-icon name="pencil" aria-hidden="true"></lc-icon>${text('recipes.writeNote')}
         </lc-button>
       </div>
@@ -440,56 +564,17 @@ export function screen(ctx: ScreenContext): HTMLElement {
                   ? html`<lc-button
                       variant="ghost"
                       @click=${() => {
-                        notesWatch.stop();
-                        notes = resourceFor(
-                          'listRecipeNotes',
-                          { params: { id }, query: { pageSize: NOTES_ALL } },
-                          { tags: ['notes'] },
-                        );
-                        notesWatch = watch(element, [notes], () => draw());
+                        this.notesAll.value = true;
                       }}
                     >${text('recipes.showAllNotes', { count: page.total })}</lc-button>`
                   : nothing
               }`
       }
     </section>`;
-  };
+  }
 
-  const statusWell = (current: Recipe): TemplateResult => html`<div class="cl-recipe-status">
-    <p class="cl-recipe-status-word">
-      ${current.canMake ? text('recipes.ready') : text('recipes.missingN', { count: current.missingCount })}
-    </p>
-    <span class="cl-recipe-bulbs" aria-hidden="true">
-      ${current.lines.map((line) => html`<cl-bulb size="mini" status=${lineBulb(line)}></cl-bulb>`)}
-    </span>
-    <p class="cl-recipe-status-text">${statusSummary(current)}</p>
-  </div>`;
-
-  const servingsRow = (servings: number, unit: PreferredUnit): TemplateResult => html`<div class="cl-recipe-servings">
-      <lc-number-input
-        stepper
-        label=${text('recipes.servings')}
-        min="1"
-        max=${SERVINGS_MAX}
-        .value=${servings}
-        @change=${(event: Event) => {
-          const next = eventNumber(event);
-          if (next !== null) {
-            const clamped = servingsOf(String(next));
-            ctx.query.set({ servings: clamped === 1 ? null : String(clamped) }, 'replace');
-          }
-        }}
-      ></lc-number-input>
-      <lc-segmented
-        label=${text('recipes.units')}
-        value=${unit}
-        .options=${[{ value: 'oz', label: 'oz' }, { value: 'ml', label: 'ml' }]}
-        @change=${(event: Event) => ctx.query.set({ unit: eventText(event) || null }, 'replace')}
-      ></lc-segmented>
-    </div>
-    ${servings === 1 ? nothing : html`<p class="cl-recipe-scaled" role="status">${text('recipes.scaled', { count: servings })}</p>`}`;
-
-  const linesBlock = (current: Recipe, servings: number, unit: PreferredUnit): TemplateResult => html`<div
+  linesBlock(current: Recipe, servings: number, unit: PreferredUnit): TemplateResult {
+    return html`<div
     class="cl-recipe-lines"
     role="list"
     aria-label=${text('recipes.ingredients')}
@@ -507,85 +592,80 @@ export function screen(ctx: ScreenContext): HTMLElement {
         .effect=${line.substitutionEffect}
         ?optional=${line.optional}
         note=${line.note}
-        @more=${(event: Event) => lineMenu(triggerOf(event, element), line)}
+        @more=${(event: Event) => this.lineMenu(triggerOf(event, this), line)}
       ></cl-ingredient-line>`,
     )}
   </div>`;
+  }
 
-  const wakeRow = (): TemplateResult | typeof nothing =>
-    wakeSupported || wakeRefused
+  wakeRow(): TemplateResult | typeof nothing {
+    const refused = this.wakeRefused.value;
+    return WAKE_SUPPORTED || refused
       ? html`<div class="cl-recipe-wake">
           <lc-switch
             label=${text('recipes.keepAwake')}
-            hint=${wakeRefused ? text('recipes.keepAwakeRefused') : text('recipes.keepAwakeHint')}
-            ?checked=${wakeWanted}
+            hint=${refused ? text('recipes.keepAwakeRefused') : text('recipes.keepAwakeHint')}
+            ?checked=${this.wakeWanted.value}
             @change=${(event: Event) => {
-              wakeWanted = eventChecked(event);
-              wakeRefused = false;
-              void (wakeWanted ? acquireWake() : releaseWake());
-              draw();
+              this.wakeWanted.value = eventChecked(event);
+              this.wakeRefused.value = false;
             }}
           ></lc-switch>
         </div>`
       : nothing;
+  }
 
-  const primaryButton = (current: Recipe): TemplateResult =>
-    current.missingCount > 0
-      ? html`<lc-button variant="primary" @click=${() => void addMissing()}
+  primaryButton(current: Recipe): TemplateResult {
+    return current.missingCount > 0
+      ? html`<lc-button variant="primary" @click=${() => void this.addMissing()}
           >${text(current.missingCount === 1 ? 'recipes.addMissingOne' : 'recipes.addMissing', { count: current.missingCount })}</lc-button
         >`
-      : html`<lc-button variant="primary" @click=${() => void openMenuSheet(current)}>${text('recipes.addToMenu')}</lc-button>`;
+      : html`<lc-button variant="primary" @click=${() => void openMenuSheet(this, current)}>${text('recipes.addToMenu')}</lc-button>`;
+  }
 
-  const madeButton = (): TemplateResult => html`<lc-button variant="quiet" @click=${() => void madeIt()}>
-    <lc-icon name="check" aria-hidden="true"></lc-icon>${text('recipes.madeItButton')}
-  </lc-button>`;
-
-  const actionsRow = (current: Recipe, servings: number, unit: PreferredUnit): TemplateResult => html`<div
+  actionsRow(current: Recipe, servings: number, unit: PreferredUnit): TemplateResult {
+    return html`<div
     class="cl-recipe-actions"
   >
-    ${madeButton()} ${primaryButton(current)}
+    ${madeButton(() => void this.madeIt())} ${this.primaryButton(current)}
     ${
       current.missingCount > 0
-        ? html`<lc-button variant="quiet" @click=${() => void openMenuSheet(current)}>${text('recipes.addToMenu')}</lc-button>`
+        ? html`<lc-button variant="quiet" @click=${() => void openMenuSheet(this, current)}>${text('recipes.addToMenu')}</lc-button>`
         : nothing
     }
-    <lc-button variant="quiet" @click=${() => void openCollectionSheet(current)}>${text('recipes.addToCollection')}</lc-button>
-    <lc-button variant="quiet" href=${href(printPath(servings, unit))}>
+    <lc-button variant="quiet" @click=${() => void openCollectionSheet(this, current)}>${text('recipes.addToCollection')}</lc-button>
+    <lc-button variant="quiet" href=${href(printPath(this.recipeId, servings, unit))}>
       <lc-icon name="printer" aria-hidden="true"></lc-icon>${text('recipes.print')}
     </lc-button>
-    <lc-button variant="quiet" href=${href(`/recipes/${id}/edit`)}>
+    <lc-button variant="quiet" href=${href(`/recipes/${this.recipeId}/edit`)}>
       <lc-icon name="pencil" aria-hidden="true"></lc-icon>${text('recipes.edit')}
     </lc-button>
   </div>`;
+  }
 
-  const favoriteButton = (current: Recipe): TemplateResult => html`<button
+  favoriteButton(current: Recipe): TemplateResult {
+    return html`<button
     type="button"
     class="cl-recipe-onphoto"
     aria-pressed=${current.mine.favorite ? 'true' : 'false'}
     aria-label=${text('card.favorite', { name: current.name })}
-    @click=${() => void toggleFavorite(current)}
+    @click=${() => void this.toggleFavorite(current)}
   ><lc-icon name="heart" ?solid=${current.mine.favorite} aria-hidden="true"></lc-icon></button>`;
+  }
 
-  const moreButton = (
-    current: Recipe,
-    session: SessionPerson,
-    servings: number,
-    unit: PreferredUnit,
-  ): TemplateResult => html`<button
+  moreButton(current: Recipe, person: SessionPerson, servings: number, unit: PreferredUnit): TemplateResult {
+    return html`<button
     type="button"
     class="cl-recipe-onphoto"
     aria-haspopup="menu"
     aria-label=${text('recipes.moreActions', { name: current.name })}
     @click=${(event: MouseEvent) =>
-      openActions(triggerOf(event, element), current.name, moreItems(current, session, servings, unit))}
+      openActions(this, triggerOf(event, this), current.name, this.moreItems(current, person, servings, unit))}
   ><lc-icon name="ellipsis" aria-hidden="true"></lc-icon></button>`;
+  }
 
-  const media = (
-    current: Recipe,
-    session: SessionPerson,
-    servings: number,
-    unit: PreferredUnit,
-  ): TemplateResult => html`<div
+  media(current: Recipe, person: SessionPerson, servings: number, unit: PreferredUnit): TemplateResult {
+    return html`<div
     class="cl-recipe-media"
   >
     ${photo(current)}
@@ -594,62 +674,43 @@ export function screen(ctx: ScreenContext): HTMLElement {
         ><lc-icon name="chevron-left" aria-hidden="true"></lc-icon
       ></a>
       <span class="cl-recipe-photo-bar-end">
-        ${favoriteButton(current)}
-        ${moreButton(current, session, servings, unit)}
+        ${this.favoriteButton(current)}
+        ${this.moreButton(current, person, servings, unit)}
       </span>
     </div>
   </div>`;
+  }
 
-  const failed = (): void => {
-    render(
-      html`<lc-empty-state
-        title=${text('loadFailed.title', { screen: text('title.recipe') })}
-        description=${text('loadFailed.body')}
-      >
-        ${illustration('empty-lost')}
-        <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
-      </lc-empty-state>`,
-      element,
-    );
-  };
-
-  const draw = (): void => {
-    const current = recipe.peek();
-    const session = ctx.person.current();
-    const problem = loadState?.error(recipe) ?? null;
-    if (problem !== null && current === undefined) {
-      if (problem.code === 'not_found') {
-        notFound(others);
-        if (others === null) {
-          call('listRecipes', { query: { pageSize: 1 } }).then(
-            (page) => {
-              others = page.facets.all;
-              notFound(others);
-            },
-            (error: unknown) => actionFailed(error, () => draw()),
-          );
-        }
-      } else {
-        failed();
-      }
-      return;
+  render() {
+    if (!this.valid) {
+      return notFound();
     }
-    if (current === undefined || session === null) {
-      if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
-        element.replaceChildren(skeleton('figure', text('title.recipe')), skeleton('lines', text('title.recipe')));
+    const current = this.recipe.value.value;
+    const person = session.current.value;
+    if (current === undefined) {
+      switch (this.load.phase.value) {
+        case 'failed':
+          return this.load.error.value?.code === 'not_found'
+            ? notFound(this.others.value)
+            : loadFailed(text('title.recipe'), () => this.load.retry(), 'none');
+        case 'slow':
+          return html`${skeleton('figure', text('title.recipe'))}${skeleton('lines', text('title.recipe'))}`;
+        default:
+          return nothing;
       }
-      return;
     }
-    setScreenTitle(current.name);
-    const servings = servingsOf(ctx.query.get('servings'));
-    const unit = unitOf(ctx.query.get('unit'), session);
-    render(
-      html`
-        ${media(current, session, servings, unit)}
+    if (person === null) {
+      return nothing;
+    }
+    const query = route.query.value;
+    const servings = servingsOf(query.get('servings'));
+    const unit = unitOf(query.get('unit'), person);
+    return html`
+        ${this.media(current, person, servings, unit)}
         <div class="cl-recipe-sheet">
           <header class="cl-recipe-head">
             <h1 class="cl-recipe-name">${current.name}</h1>
-            <span class="cl-recipe-head-favorite">${favoriteButton(current)} ${moreButton(current, session, servings, unit)}</span>
+            <span class="cl-recipe-head-favorite">${this.favoriteButton(current)} ${this.moreButton(current, person, servings, unit)}</span>
           </header>
           ${current.description === '' ? nothing : html`<p class="cl-recipe-description">${current.description}</p>`}
           <p class="cl-recipe-facts">${facts(current, unit).map((fact) => html`<span>${fact}</span>`)}</p>
@@ -657,36 +718,24 @@ export function screen(ctx: ScreenContext): HTMLElement {
             ${ratingControl({
               value: current.mine.rating?.value ?? 0,
               household: current.household.rating,
-              recipeId: id,
+              recipeId: this.recipeId,
               onRated: () => undefined,
             })}
             ${madeLine(current)}
           </div>
-          ${statusWell(current)} ${servingsRow(servings, unit)} ${linesBlock(current, servings, unit)} ${wakeRow()}
-          ${actionsRow(current, servings, unit)}
-          ${method(current)} ${details(current)} ${variations(current)} ${notesSection(current, session)}
+          ${statusWell(current)} ${servingsRow(servings, unit)} ${this.linesBlock(current, servings, unit)} ${this.wakeRow()}
+          ${this.actionsRow(current, servings, unit)}
+          ${method(current)} ${details(current)} ${variations(current)} ${this.notesSection(current, person)}
         </div>
-        <div class="cl-recipe-actionbar">${madeButton()} ${primaryButton(current)}</div>
-      `,
-      element,
-    );
-  };
+        <div class="cl-recipe-actionbar">${madeButton(() => void this.madeIt())} ${this.primaryButton(current)}</div>
+      `;
+  }
+}
 
-  watch(element, [recipe], (state) => {
-    loadState = state;
-    draw();
-  });
-  let notesWatch = watch(element, [notes], () => draw());
-  watch(element, [shopping], () => undefined);
-  const stopQuery = ctx.query.subscribe(draw);
-  const stopPerson = ctx.person.subscribe(draw);
-  document.addEventListener('visibilitychange', onVisible);
-  void acquireWake();
-  onLeave(element, () => {
-    stopQuery();
-    stopPerson();
-    document.removeEventListener('visibilitychange', onVisible);
-    void releaseWake();
-  });
-  return element;
+View.register(tag, RecipesRecipe);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: RecipesRecipe;
+  }
 }

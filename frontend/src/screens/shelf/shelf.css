@@ -77,3 +77,7 @@
   align-items: flex-end;
   gap: var(--space-5);
 }
+
+cl-shelf-bottle-sheet {
+  display: contents;
+}

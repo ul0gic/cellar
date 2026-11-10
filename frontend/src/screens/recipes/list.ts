@@ -1,18 +1,22 @@
 import type { RecipePage, RecipeSummary } from '@cellar/contract';
 import type { DropdownItem, TableColumn, TableRow } from '@lightstart/components/types.js';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal } from '@lightstart/light/signals';
 import { call } from '../../app/api.ts';
+import { route } from '../../app/controllers/route.ts';
+import { session } from '../../app/controllers/session.ts';
+import { viewport } from '../../app/controllers/viewport.ts';
 import { eventText } from '../../app/events.ts';
-import { type WatchState, onLeave, type Watched, watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import { href } from '../../app/router.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { href, navigate, setQuery } from '../../app/router.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
 import { illustration } from '../../design-system/illustration.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
-import { isWide, openActions } from './parts/actions.ts';
+import { openActions } from './parts/actions.ts';
 import { openFilterSheet, SORT_KEYS } from './parts/filter-sheet.ts';
 import {
   apiQuery,
@@ -28,10 +32,26 @@ import {
   statusParam,
   sortsFor,
   type Status,
-  type View,
+  type View as ListView,
 } from './parts/list-query.ts';
 import { segmentsOf } from './parts/segments.ts';
+import '../../design-system/cl-figure.ts';
+import '../../design-system/cl-have-bar.ts';
+import '../../design-system/cl-recipe-card.ts';
+import '../../design-system/cl-recipe-row.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/badge.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/image.ts';
+import '../../design-system/lc/pagination.ts';
+import '../../design-system/lc/segmented.ts';
+import '../../design-system/lc/table.ts';
+import '../../design-system/lc/tag.ts';
 import './list.css';
+
+export const tag = 'cl-screen-recipes-list';
 
 const STATUS_LABEL: Readonly<Record<Status, `recipes.${string}`>> = {
   'can-make': 'recipes.statusCanMake',
@@ -82,106 +102,186 @@ function figureLabels(state: ListState, page: RecipePage): { label: string; subl
   }
 }
 
-interface Named {
-  peek():
-    | { readonly items: readonly { id: number; name: string }[] }
-    | { readonly collections: readonly { id: number; name: string }[] }
-    | undefined;
+function nameOf(items: readonly { id: number; name: string }[] | undefined, id: string): string {
+  return items?.find((item) => String(item.id) === id)?.name ?? '';
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-recipes';
-  let state = readState(ctx.query);
-  let source = resourceFor('listRecipes', { query: apiQuery(state) }, { tags: ['recipes', 'shelf'] });
-  let lastPage: RecipePage | undefined;
-  const glasses = resourceFor('listGlasses', {}, { tags: ['settings'] });
-  const methods = resourceFor('listMethods', {}, { tags: ['settings'] });
-  const tags = resourceFor('listTags', {}, { tags: ['settings'] });
-  const collections = resourceFor('listCollections', {}, { tags: ['collections'] });
-  const nameOf = (names: Named, id: string): string => {
-    const value = names.peek();
-    const items = value === undefined ? [] : 'collections' in value ? value.collections : value.items;
-    return items.find((item) => String(item.id) === id)?.name ?? '';
-  };
-  let loadState: WatchState | null = null;
+function tableColumns(): TableColumn[] {
+  return [
+    { name: 'photo', label: '' },
+    { name: 'recipe', label: text('recipes.colRecipe') },
+    { name: 'have', label: text('recipes.colHave') },
+    { name: 'abv', label: text('recipes.colAbv'), align: 'right' },
+    { name: 'rating', label: text('recipes.colRating'), align: 'right' },
+    { name: 'made', label: text('recipes.colMade'), align: 'right' },
+    { name: 'favorite', label: '' },
+  ];
+}
 
-  const toggleFavorite = async (recipe: RecipeSummary): Promise<void> => {
-    try {
-      await (recipe.mine.favorite
-        ? call('unfavoriteRecipe', { params: { id: recipe.id } })
-        : call('favoriteRecipe', { params: { id: recipe.id } }));
-      invalidate('recipes');
-    } catch (error) {
-      actionFailed(error, () => void toggleFavorite(recipe));
-    }
-  };
+function setView(view: ListView): void {
+  rememberView(view);
+  setQuery({ view, page: null }, 'replace');
+}
 
-  const setView = (view: View): void => {
-    rememberView(view);
-    ctx.query.set({ view, page: null }, 'replace');
-  };
+function clearQuery(): void {
+  setQuery({ q: null, page: null }, 'replace');
+}
 
-  const filters = (): void => {
-    openFilterSheet(state, (result) =>
-      ctx.query.set({ ...filtersPatch(result.filters), sort: sortParam(result.sort, state.q) }, 'push'),
-    ).catch((error: unknown) => actionFailed(error, () => filters()));
-  };
+function clearAll(): void {
+  setQuery({ ...filtersPatch(NO_FILTERS), q: null }, 'replace');
+}
 
-  const newItems = (): DropdownItem[] => [
-    { label: text('recipes.writeIt'), icon: 'pencil', onClick: () => ctx.navigate('/recipes/new') },
-    { label: text('recipes.fromWebPage'), icon: 'external-link', onClick: () => ctx.navigate('/import/url') },
-    ...(ctx.person.current()?.household.aiEnabled === true
+function newItems(): DropdownItem[] {
+  return [
+    { label: text('recipes.writeIt'), icon: 'pencil', onClick: () => navigate('/recipes/new') },
+    { label: text('recipes.fromWebPage'), icon: 'external-link', onClick: () => navigate('/import/url') },
+    ...(session.current.peek()?.household.aiEnabled === true
       ? [
           {
             label: text('recipes.describeIt'),
             icon: 'sparkles',
-            onClick: () => ctx.navigate('/recipes/new', { state: { describe: true } }),
+            onClick: () => navigate('/recipes/new', { state: { describe: true } }),
           },
         ]
       : []),
   ];
+}
 
-  const sortItems = (): DropdownItem[] =>
-    sortsFor(state.q).map((sort) => ({
-      label: text(SORT_KEYS[sort]),
-      checked: sort === state.sort,
-      onClick: () => ctx.query.set({ sort: sortParam(sort, state.q), page: null }, 'replace'),
-    }));
+function sortItems(state: ListState): DropdownItem[] {
+  return sortsFor(state.q).map((sort) => ({
+    label: text(SORT_KEYS[sort]),
+    checked: sort === state.sort,
+    onClick: () => setQuery({ sort: sortParam(sort, state.q), page: null }, 'replace'),
+  }));
+}
 
-  const clearQuery = (): void => ctx.query.set({ q: null, page: null }, 'replace');
-  const clearAll = (): void => ctx.query.set({ ...filtersPatch(NO_FILTERS), q: null }, 'replace');
+function emptyState(state: ListState, page: RecipePage): TemplateResult {
+  const filtered = filterCount(state.filters) > 0 || state.q !== null;
+  if (filtered) {
+    return html`<lc-empty-state title=${text('recipes.noMatchTitle')} description=${text('recipes.noMatchBody')}>
+        ${illustration('empty-glass')}
+        <lc-button variant="primary" @click=${clearAll}>${text('recipes.clearFilters')}</lc-button>
+        <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.searchAll', { count: page.facets.all })}</lc-button>
+      </lc-empty-state>`;
+  }
+  switch (state.status) {
+    case 'favorites':
+      return html`<lc-empty-state title=${text('recipes.noFavoritesTitle')} description=${text('recipes.noFavoritesBody')}>
+          ${illustration('empty-glass')}
+        </lc-empty-state>`;
+    case 'made':
+      return html`<lc-empty-state title=${text('recipes.noMadeTitle')} description=${text('recipes.noMadeBody')}>
+          ${illustration('empty-glass')}
+        </lc-empty-state>`;
+    case 'can-make':
+      return html`<lc-empty-state title=${text('recipes.emptyShelfTitle')} description=${text('recipes.emptyShelfBody')}>
+          ${illustration('empty-shelf')}
+          <lc-button variant="primary" href=${href('/shelf')}>${text('recipes.addBottles')}</lc-button>
+          <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.seeAll', { count: page.facets.all })}</lc-button>
+        </lc-empty-state>`;
+    default:
+      return html`<lc-empty-state title=${text('recipes.noMatchTitle')} description=${text('recipes.noneInStatus')}>
+          ${illustration('empty-glass')}
+          <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.seeAll', { count: page.facets.all })}</lc-button>
+        </lc-empty-state>`;
+  }
+}
 
-  const activeTags = (): TemplateResult | typeof nothing => {
+function pager(page: RecipePage): TemplateResult | typeof nothing {
+  const pages = Math.ceil(page.total / page.pageSize);
+  if (pages <= 1) {
+    return nothing;
+  }
+  const first = (page.page - 1) * page.pageSize + 1;
+  const last = Math.min(page.page * page.pageSize, page.total);
+  return html`<div class="cl-recipes-pager">
+      <lc-pagination
+        .current=${page.page}
+        .total=${pages}
+        @change=${(event: Event) => {
+          const next = event instanceof CustomEvent && typeof event.detail?.page === 'number' ? event.detail.page : 1;
+          setQuery({ page: next === 1 ? null : String(next) }, 'push');
+        }}
+      ></lc-pagination>
+      <p class="cl-recipes-muted">${text('recipes.range', { first, last, total: page.total })}</p>
+    </div>`;
+}
+
+class RecipesList extends View {
+  readonly recipes = apiResource('listRecipes', ['recipes', 'shelf']);
+  readonly glasses = apiResource('listGlasses', ['settings']);
+  readonly methods = apiResource('listMethods', ['settings']);
+  readonly tags = apiResource('listTags', ['settings']);
+  readonly collections = apiResource('listCollections', ['collections']);
+  readonly load = loadState([this.recipes]);
+  readonly lastPage = signal<RecipePage | undefined>(undefined);
+
+  connected(): void {
+    this.classList.add('cl-recipes');
+    this.recipes.bind(this, () => ({ query: apiQuery(readState(route.query.value)) }));
+    this.glasses.bind(this, {});
+    this.methods.bind(this, {});
+    this.tags.bind(this, {});
+    this.collections.bind(this, {});
+    const remember = effect(() => {
+      const current = this.recipes.value.value;
+      if (current !== undefined && current !== this.lastPage.peek()) {
+        this.lastPage.value = current;
+      }
+    });
+    this.$own(() => remember.dispose());
+  }
+
+  async toggleFavorite(recipe: RecipeSummary): Promise<void> {
+    try {
+      await (recipe.mine.favorite
+        ? call('unfavoriteRecipe', { params: { id: recipe.id } })
+        : call('favoriteRecipe', { params: { id: recipe.id } }));
+      dataChanged('recipes');
+    } catch (error) {
+      actionFailed(error, () => void this.toggleFavorite(recipe));
+    }
+  }
+
+  filters(state: ListState): void {
+    openFilterSheet(this, state, (result) =>
+      setQuery({ ...filtersPatch(result.filters), sort: sortParam(result.sort, state.q) }, 'push'),
+    ).catch((error: unknown) => actionFailed(error, () => this.filters(state)));
+  }
+
+  activeTags(state: ListState): TemplateResult | typeof nothing {
     if (filterCount(state.filters) === 0 && state.q === null) {
       return nothing;
     }
     const f = state.filters;
     const chips: { label: string; remove: () => void }[] = [];
-    const drop = (patch: Partial<typeof f>): void => ctx.query.set(filtersPatch({ ...f, ...patch }), 'replace');
+    const drop = (patch: Partial<typeof f>): void => setQuery(filtersPatch({ ...f, ...patch }), 'replace');
     if (state.q !== null) {
       chips.push({ label: text('recipes.tagQuery', { query: state.q }), remove: clearQuery });
     }
     for (const id of f.glass) {
       chips.push({
-        label: nameOf(glasses, id),
+        label: nameOf(this.glasses.value.value?.items, id),
         remove: () => drop({ glass: f.glass.filter((item) => item !== id) }),
       });
     }
     for (const id of f.method) {
       chips.push({
-        label: nameOf(methods, id),
+        label: nameOf(this.methods.value.value?.items, id),
         remove: () => drop({ method: f.method.filter((item) => item !== id) }),
       });
     }
     for (const id of f.tag) {
       chips.push({
-        label: nameOf(tags, id),
+        label: nameOf(this.tags.value.value?.items, id),
         remove: () => drop({ tag: f.tag.filter((item) => item !== id) }),
       });
     }
     if (f.collection !== null) {
-      chips.push({ label: nameOf(collections, f.collection), remove: () => drop({ collection: null }) });
+      chips.push({
+        label: nameOf(this.collections.value.value?.collections, f.collection),
+        remove: () => drop({ collection: null }),
+      });
     }
     if (f.abvMin !== null || f.abvMax !== null) {
       chips.push({
@@ -198,18 +298,18 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return html`<div class="cl-recipes-active" aria-label=${text('recipes.activeFilters')}>
       ${chips.map(
         (
-          tag,
-        ) => html`<lc-tag closable aria-label=${text('recipes.removeFilter', { name: tag.label })} @close=${tag.remove}
-          >${tag.label}</lc-tag
+          chip,
+        ) => html`<lc-tag closable aria-label=${text('recipes.removeFilter', { name: chip.label })} @close=${chip.remove}
+          >${chip.label}</lc-tag
         >`,
       )}
       <lc-button variant="ghost" size="sm" @click=${clearAll}
         >${text('recipes.clearAll')}</lc-button
       >
     </div>`;
-  };
+  }
 
-  const head = (page: RecipePage | undefined): TemplateResult => {
+  head(state: ListState, page: RecipePage | undefined): TemplateResult {
     const count = filterCount(state.filters);
     const labels = page === undefined ? { label: '', sublabel: '' } : figureLabels(state, page);
     return html`<header class="cl-recipes-head">
@@ -229,18 +329,18 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ]}
           @change=${(event: Event) => setView(eventText(event) === 'list' ? 'list' : 'cards')}
         ></lc-segmented>
-        <lc-button variant="quiet" @click=${filters}>
+        <lc-button variant="quiet" @click=${() => this.filters(state)}>
           <lc-icon name="sliders-horizontal" aria-hidden="true"></lc-icon>${text('recipes.filters')}
           ${count === 0 ? nothing : html`<lc-badge>${count}</lc-badge>`}
         </lc-button>
         ${
-          isWide()
+          viewport.wide.value
             ? html`<lc-button
                 variant="quiet"
                 aria-haspopup="menu"
                 @click=${(event: MouseEvent) => {
                   if (event.currentTarget instanceof Element) {
-                    openActions(event.currentTarget, text('recipes.sortBy'), sortItems());
+                    openActions(this, event.currentTarget, text('recipes.sortBy'), sortItems(state));
                   }
                 }}
               ><lc-icon name="arrow-up-down" aria-hidden="true"></lc-icon>${text(SORT_KEYS[state.sort])}</lc-button>`
@@ -251,7 +351,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
           aria-haspopup="menu"
           @click=${(event: MouseEvent) => {
             if (event.currentTarget instanceof Element) {
-              openActions(event.currentTarget, text('recipes.newRecipe'), newItems());
+              openActions(this, event.currentTarget, text('recipes.newRecipe'), newItems());
             }
           }}
         ><lc-icon name="plus" aria-hidden="true"></lc-icon>${text('recipes.newRecipe')}</lc-button>
@@ -264,25 +364,15 @@ export function screen(ctx: ScreenContext): HTMLElement {
           size="sm"
           variant=${status === state.status ? 'primary' : 'quiet'}
           aria-pressed=${status === state.status ? 'true' : 'false'}
-          @click=${() => ctx.query.set({ status: statusParam(status, state.q), page: null }, 'push')}
+          @click=${() => setQuery({ status: statusParam(status, state.q), page: null }, 'push')}
         >${text(STATUS_LABEL[status])}${chip === null ? nothing : html` <span class="cl-recipes-chip-count">${chip}</span>`}</lc-button>`;
       })}
     </div>
-    ${activeTags()}`;
-  };
+    ${this.activeTags(state)}`;
+  }
 
-  const tableColumns = (): TableColumn[] => [
-    { name: 'photo', label: '' },
-    { name: 'recipe', label: text('recipes.colRecipe') },
-    { name: 'have', label: text('recipes.colHave') },
-    { name: 'abv', label: text('recipes.colAbv'), align: 'right' },
-    { name: 'rating', label: text('recipes.colRating'), align: 'right' },
-    { name: 'made', label: text('recipes.colMade'), align: 'right' },
-    { name: 'favorite', label: '' },
-  ];
-
-  const tableRows = (items: readonly RecipeSummary[]): TableRow[] =>
-    items.map((recipe) => {
+  tableRows(items: readonly RecipeSummary[]): TableRow[] {
+    return items.map((recipe) => {
       const segments = segmentsOf(recipe);
       return {
         photo:
@@ -300,12 +390,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
           class="cl-recipes-fav"
           aria-pressed=${recipe.mine.favorite ? 'true' : 'false'}
           aria-label=${text('card.favorite', { name: recipe.name })}
-          @click=${() => void toggleFavorite(recipe)}
+          @click=${() => void this.toggleFavorite(recipe)}
         ><lc-icon name="heart" ?solid=${recipe.mine.favorite} aria-hidden="true"></lc-icon></button>`,
       };
     });
+  }
 
-  const results = (page: RecipePage): TemplateResult => {
+  results(state: ListState, page: RecipePage): TemplateResult {
     if (state.view === 'cards') {
       return html`<ul class="cl-recipes-grid">
         ${page.items.map(
@@ -320,14 +411,14 @@ export function screen(ctx: ScreenContext): HTMLElement {
               .rating=${recipe.household.rating.average}
               .madeCount=${recipe.mine.madeCount === 0 ? null : recipe.mine.madeCount}
               ?favorite=${recipe.mine.favorite}
-              @favorite-toggle=${() => void toggleFavorite(recipe)}
+              @favorite-toggle=${() => void this.toggleFavorite(recipe)}
             ></cl-recipe-card>
           </li>`,
         )}
       </ul>`;
     }
-    if (isWide()) {
-      return html`<lc-table class="cl-recipes-table" .columns=${tableColumns()} .rows=${tableRows(page.items)}></lc-table>`;
+    if (viewport.wide.value) {
+      return html`<lc-table class="cl-recipes-table" .columns=${tableColumns()} .rows=${this.tableRows(page.items)}></lc-table>`;
     }
     return html`<ul class="cl-recipes-rows">
       ${page.items.map(
@@ -343,106 +434,36 @@ export function screen(ctx: ScreenContext): HTMLElement {
         </li>`,
       )}
     </ul>`;
-  };
+  }
 
-  const pager = (page: RecipePage): TemplateResult | typeof nothing => {
-    const pages = Math.ceil(page.total / page.pageSize);
-    if (pages <= 1) {
-      return nothing;
-    }
-    const first = (page.page - 1) * page.pageSize + 1;
-    const last = Math.min(page.page * page.pageSize, page.total);
-    return html`<div class="cl-recipes-pager">
-      <lc-pagination
-        .current=${page.page}
-        .total=${pages}
-        @change=${(event: Event) => {
-          const next = event instanceof CustomEvent && typeof event.detail?.page === 'number' ? event.detail.page : 1;
-          ctx.query.set({ page: next === 1 ? null : String(next) }, 'push');
-        }}
-      ></lc-pagination>
-      <p class="cl-recipes-muted">${text('recipes.range', { first, last, total: page.total })}</p>
-    </div>`;
-  };
-
-  const emptyState = (page: RecipePage): TemplateResult => {
-    const filtered = filterCount(state.filters) > 0 || state.q !== null;
-    if (filtered) {
-      return html`<lc-empty-state title=${text('recipes.noMatchTitle')} description=${text('recipes.noMatchBody')}>
-        ${illustration('empty-glass')}
-        <lc-button variant="primary" @click=${clearAll}>${text('recipes.clearFilters')}</lc-button>
-        <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.searchAll', { count: page.facets.all })}</lc-button>
-      </lc-empty-state>`;
-    }
-    switch (state.status) {
-      case 'favorites':
-        return html`<lc-empty-state title=${text('recipes.noFavoritesTitle')} description=${text('recipes.noFavoritesBody')}>
-          ${illustration('empty-glass')}
-        </lc-empty-state>`;
-      case 'made':
-        return html`<lc-empty-state title=${text('recipes.noMadeTitle')} description=${text('recipes.noMadeBody')}>
-          ${illustration('empty-glass')}
-        </lc-empty-state>`;
-      case 'can-make':
-        return html`<lc-empty-state title=${text('recipes.emptyShelfTitle')} description=${text('recipes.emptyShelfBody')}>
-          ${illustration('empty-shelf')}
-          <lc-button variant="primary" href=${href('/shelf')}>${text('recipes.addBottles')}</lc-button>
-          <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.seeAll', { count: page.facets.all })}</lc-button>
-        </lc-empty-state>`;
-      default:
-        return html`<lc-empty-state title=${text('recipes.noMatchTitle')} description=${text('recipes.noneInStatus')}>
-          ${illustration('empty-glass')}
-          <lc-button variant="quiet" href=${href('/recipes?status=all')}>${text('recipes.seeAll', { count: page.facets.all })}</lc-button>
-        </lc-empty-state>`;
-    }
-  };
-
-  const draw = (): void => {
-    const page = source.peek() ?? lastPage;
-    const problem = loadState?.error(source) ?? null;
-    if (source.peek() !== undefined) {
-      lastPage = source.peek();
-    }
+  render() {
+    const state = readState(route.query.value);
+    const phase = this.load.phase.value;
+    const current = this.recipes.value.value;
     let body: TemplateResult | HTMLElement | typeof nothing = nothing;
-    if (problem !== null && source.peek() === undefined) {
+    if (current !== undefined) {
+      body =
+        current.items.length === 0
+          ? emptyState(state, current)
+          : html`${this.results(state, current)} ${pager(current)}`;
+    } else if (phase === 'failed') {
       body = html`<lc-alert variant="error" icon="circle-alert" title=${text('recipes.listFailedTitle')}>
         <p>${text('recipes.listFailedBody')}</p>
         <div class="cl-banner-actions">
-          <lc-button size="sm" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
+          <lc-button size="sm" @click=${() => this.load.retry()}>${text('loadFailed.retry')}</lc-button>
         </div>
       </lc-alert>`;
-    } else if (source.peek() === undefined) {
-      body =
-        loadState?.slow === true ? skeleton(state.view === 'cards' ? 'cards' : 'rows', text('nav.recipes')) : nothing;
-    } else if (page !== undefined) {
-      body = page.items.length === 0 ? emptyState(page) : html`${results(page)} ${pager(page)}`;
+    } else if (phase === 'slow') {
+      body = skeleton(state.view === 'cards' ? 'cards' : 'rows', text('nav.recipes'));
     }
-    render(
-      html`${head(page)} <div class="cl-recipes-body" aria-busy=${source.peek() === undefined ? 'true' : 'false'}>${body}</div>`,
-      element,
-    );
-  };
+    return html`${this.head(state, current ?? this.lastPage.peek())} <div class="cl-recipes-body" aria-busy=${current === undefined ? 'true' : 'false'}>${body}</div>`;
+  }
+}
 
-  let key = JSON.stringify(apiQuery(state));
-  const watchSource = (): Watched =>
-    watch(element, [source], (current) => {
-      loadState = current;
-      draw();
-    });
-  let sourceWatch = watchSource();
-  watch(element, [glasses, methods, tags, collections], () => draw());
-  const stopQuery = ctx.query.subscribe(() => {
-    state = readState(ctx.query);
-    const next = JSON.stringify(apiQuery(state));
-    if (next !== key) {
-      key = next;
-      sourceWatch.stop();
-      source = resourceFor('listRecipes', { query: apiQuery(state) }, { tags: ['recipes', 'shelf'] });
-      sourceWatch = watchSource();
-      return;
-    }
-    draw();
-  });
-  onLeave(element, stopQuery);
-  return element;
+View.register(tag, RecipesList);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: RecipesList;
+  }
 }

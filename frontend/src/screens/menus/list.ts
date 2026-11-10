@@ -1,17 +1,22 @@
 import { LIMITS, type MenuSummary } from '@cellar/contract';
 import type { LightElements } from '@lightstart/components/elements.js';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
-import { type WatchState, watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import { href } from '../../app/router.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { href, navigate } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
 import { today } from '../../app/today.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import '../../design-system/cl-live-card.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { illustration } from '../../design-system/illustration.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/dropdown.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/icon.ts';
+import { waiting } from '../../design-system/load-view.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatDate } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
@@ -27,38 +32,56 @@ function copyName(name: string): string {
   return text('menus.copyName', { name }).slice(0, LIMITS.shortName.max);
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  setAppBar({});
-  const element = document.createElement('section');
-  element.className = 'cl-menus cl-reading';
-  const menus = resourceFor('listMenus', { query: { pageSize: LIMITS.pageSize.max } }, { tags: ['menus'] });
+function openMore(event: MouseEvent): void {
+  const trigger = event.currentTarget;
+  if (!(trigger instanceof HTMLElement)) {
+    return;
+  }
+  trigger.parentElement?.querySelector<Dropdown>('lc-dropdown')?.toggle(trigger);
+}
 
-  const create = async (): Promise<void> => {
+export const tag = 'cl-screen-menus-list';
+
+class MenusList extends View {
+  readonly menus = apiResource('listMenus', ['menus']);
+  readonly state = loadState([this.menus]);
+
+  connected(): void {
+    setAppBar({});
+    this.classList.add('cl-menus', 'cl-reading');
+    this.menus.bind(this, { query: { pageSize: LIMITS.pageSize.max } });
+  }
+
+  async create(): Promise<void> {
     try {
       const menu = await call('createMenu', { body: { name: text('menus.newName'), date: today(), sections: [] } });
-      invalidate('menus');
-      ctx.navigate(`/menus/${menu.id}`);
+      dataChanged('menus');
+      if (this.isConnected) {
+        navigate(`/menus/${menu.id}`);
+      }
     } catch (error) {
-      actionFailed(error, () => void create());
+      actionFailed(error, () => void this.create());
     }
-  };
+  }
 
-  const copy = async (menu: MenuSummary): Promise<void> => {
+  async copy(menu: MenuSummary): Promise<void> {
     try {
       const copied = await call('copyMenu', {
         params: { id: menu.id },
         body: { name: copyName(menu.name), date: today() },
       });
-      invalidate('menus');
+      dataChanged('menus');
       toast({ title: text('menus.copied', { name: menu.name }) });
-      ctx.navigate(`/menus/${copied.id}`);
+      if (this.isConnected) {
+        navigate(`/menus/${copied.id}`);
+      }
     } catch (error) {
-      actionFailed(error, () => void copy(menu));
+      actionFailed(error, () => void this.copy(menu));
     }
-  };
+  }
 
-  const remove = async (menu: MenuSummary): Promise<void> => {
-    const sure = await confirm({
+  async deleteMenu(menu: MenuSummary): Promise<void> {
+    const sure = await confirm(this, {
       title: text('menus.deleteTitle', { name: menu.name }),
       message: text('menus.deleteBody'),
       confirmLabel: text('menus.deleteConfirm'),
@@ -69,31 +92,23 @@ export function screen(ctx: ScreenContext): HTMLElement {
     }
     try {
       await call('deleteMenu', { params: { id: menu.id } });
-      invalidate('menus');
+      dataChanged('menus');
       toast({ title: text('menus.deleted', { name: menu.name }) });
     } catch (error) {
-      actionFailed(error, () => void remove(menu));
+      actionFailed(error, () => void this.deleteMenu(menu));
     }
-  };
+  }
 
-  const openMore = (event: MouseEvent): void => {
-    const trigger = event.currentTarget;
-    if (!(trigger instanceof HTMLElement)) {
-      return;
-    }
-    trigger.parentElement?.querySelector<Dropdown>('lc-dropdown')?.toggle(trigger);
-  };
-
-  const row = (menu: MenuSummary): TemplateResult => {
+  row(menu: MenuSummary): TemplateResult {
     const ended = menu.endedAt !== null;
     const line = text(ended ? 'menus.rowEnded' : 'menus.rowDraft', {
       date: formatDate(menu.date),
       drinks: drinks(menu.itemCount),
     });
     const items = [
-      { label: text('menus.edit'), icon: 'pencil', onClick: () => ctx.navigate(`/menus/${menu.id}`) },
-      { label: text('menus.copy'), icon: 'copy', onClick: () => void copy(menu) },
-      { label: text('menus.delete'), icon: 'trash-2', danger: true, onClick: () => void remove(menu) },
+      { label: text('menus.edit'), icon: 'pencil', onClick: () => navigate(`/menus/${menu.id}`) },
+      { label: text('menus.copy'), icon: 'copy', onClick: () => void this.copy(menu) },
+      { label: text('menus.delete'), icon: 'trash-2', danger: true, onClick: () => void this.deleteMenu(menu) },
     ];
     return html`<li class="cl-menus-row">
       <a class="cl-menus-row-text" href=${href(`/menus/${menu.id}`)}>
@@ -102,7 +117,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </a>
       ${
         ended
-          ? html`<lc-button ghost @click=${() => void copy(menu)}>${text('menus.copy')}</lc-button>`
+          ? html`<lc-button ghost @click=${() => void this.copy(menu)}>${text('menus.copy')}</lc-button>`
           : html`<lc-button ghost href=${href(`/menus/${menu.id}`)}>${text('menus.edit')}</lc-button>`
       }
       <lc-button ghost icon-only aria-haspopup="menu" aria-label=${text('menus.more', { name: menu.name })} @click=${openMore}>
@@ -110,25 +125,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </lc-button>
       <lc-dropdown .items=${items}></lc-dropdown>
     </li>`;
-  };
+  }
 
-  const body = (load: WatchState, page: { items: readonly MenuSummary[] } | undefined): TemplateResult => {
-    if (load.phase === 'failed') {
-      return html`<lc-empty-state
-        title=${text('loadFailed.title', { screen: text('menus.title') })}
-        description=${text('loadFailed.body')}
-      >
-        ${illustration('empty-lost')}
-        <lc-button variant="primary" @click=${() => load.retry()}>${text('loadFailed.retry')}</lc-button>
-      </lc-empty-state>`;
-    }
-    if (page === undefined) {
-      return html``;
-    }
+  content(page: { items: readonly MenuSummary[] }): TemplateResult {
     if (page.items.length === 0) {
       return html`<lc-empty-state title=${text('menus.emptyTitle')} description=${text('menus.emptyBody')}>
         ${illustration('empty-menu')}
-        <lc-button variant="primary" @click=${() => void create()}>
+        <lc-button variant="primary" @click=${() => void this.create()}>
           <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('menus.new')}
         </lc-button>
       </lc-empty-state>`;
@@ -141,31 +144,35 @@ export function screen(ctx: ScreenContext): HTMLElement {
         rest.length === 0
           ? nothing
           : html`<h2 class="cl-menus-heading">${text('menus.past')}</h2>
-            <ul class="cl-menus-list">${rest.map(row)}</ul>`
+            <ul class="cl-menus-list">${rest.map((menu) => this.row(menu))}</ul>`
       }
     `;
-  };
+  }
 
-  const draw = (load: WatchState, page: { items: readonly MenuSummary[] } | undefined): void => {
-    const empty = load.phase !== 'failed' && page !== undefined && page.items.length === 0;
-    render(
-      html`
-        <header class="cl-menus-head">
-          <h1 class="cl-menus-title">${text('menus.title')}</h1>
-          ${
-            empty || load.phase === 'failed'
-              ? nothing
-              : html`<lc-button variant="primary" @click=${() => void create()}>
-                <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('menus.new')}
-              </lc-button>`
-          }
-        </header>
-        ${load.phase === 'slow' && page === undefined ? skeleton('rows', text('menus.title')) : body(load, page)}
-      `,
-      element,
-    );
-  };
+  render() {
+    const page = this.menus.value.value;
+    const shown = waiting(this.state, text('menus.title'), 'rows');
+    const failed = this.state.phase.value === 'failed';
+    return html`
+      <header class="cl-menus-head">
+        <h1 class="cl-menus-title">${text('menus.title')}</h1>
+        ${
+          failed || page?.items.length === 0
+            ? nothing
+            : html`<lc-button variant="primary" @click=${() => void this.create()}>
+              <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('menus.new')}
+            </lc-button>`
+        }
+      </header>
+      ${shown ?? (page === undefined ? nothing : this.content(page))}
+    `;
+  }
+}
 
-  watch(element, [menus], (load) => draw(load, menus.peek()));
-  return element;
+View.register(tag, MenusList);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: MenusList;
+  }
 }

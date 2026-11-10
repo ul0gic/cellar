@@ -1,13 +1,13 @@
 import type { About } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
-import { watch } from '../../app/load.ts';
-import { resourceFor } from '../../app/resources.ts';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { loadState } from '../../app/load.ts';
+import { apiResource } from '../../app/resources.ts';
 import { setAppBar } from '../../app/shell.ts';
-import type { ScreenContext } from '../../app/types.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
 import { text } from '../../text/index.ts';
-import { settingsPage } from './parts/frame.ts';
-import { loadFailed } from './parts/load-failed.ts';
+import { settingsFrame, settingsLoad } from './parts/frame.ts';
+
+export const tag = 'cl-screen-settings-licenses';
 
 const fontLicenses = import.meta.glob<string>('../../design-system/assets/fonts/OFL-*.txt', {
   query: '?raw',
@@ -22,6 +22,14 @@ const FONTS: readonly { readonly name: string; readonly file: string }[] = [
 
 type Notice = About['licenses'][number];
 
+const FONT_NOTICES: readonly Notice[] = FONTS.map((font) => ({
+  name: font.name,
+  version: text('settings.licenses.font'),
+  license: 'OFL-1.1',
+  url: null,
+  text: fontLicenses[font.file] ?? null,
+}));
+
 function notice(entry: Notice): TemplateResult {
   const meta = [entry.version, entry.license ?? text('settings.licenses.none')].join(', ');
   return html`<details class="cl-license">
@@ -31,34 +39,37 @@ function notice(entry: Notice): TemplateResult {
   </details>`;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  return settingsPage(ctx, 'about', (main) => {
-    const about = resourceFor('getAbout', {}, { tags: ['settings'] });
-    const fonts: Notice[] = FONTS.map((font) => ({
-      name: font.name,
-      version: text('settings.licenses.font'),
-      license: 'OFL-1.1',
-      url: null,
-      text: fontLicenses[font.file] ?? null,
-    }));
+class SettingsLicenses extends View {
+  readonly about = apiResource('getAbout', ['settings']);
+  readonly state = loadState([this.about]);
 
-    watch(main, [about], ({ phase, retry }) => {
-      const current = about.peek();
-      if (phase === 'failed') {
-        render(loadFailed(text('settings.licenses'), retry), main);
-      } else if (phase === 'slow') {
-        render(skeleton('rows', text('settings.licenses')), main);
-      } else if (phase === 'ready' && current !== undefined) {
-        render(
-          html`<section class="cl-sgroup" aria-labelledby="settings-licenses">
-            <h2 id="settings-licenses">${text('settings.licenses')}</h2>
-            <p>${text('settings.licenses.lead')}</p>
-            <div class="cl-panel">${[...fonts, ...current.licenses].map(notice)}</div>
-          </section>`,
-          main,
-        );
-      }
-    });
+  connected(): void {
+    this.classList.add('cl-settings');
     setAppBar({ back: '/settings/about' });
-  });
+    this.about.bind(this, {});
+  }
+
+  render() {
+    return settingsFrame('about', () => {
+      const current = this.about.value.value;
+      return (
+        settingsLoad(this.state, text('settings.licenses'), 'rows') ??
+        (current === undefined
+          ? nothing
+          : html`<section class="cl-sgroup" aria-labelledby="settings-licenses">
+              <h2 id="settings-licenses">${text('settings.licenses')}</h2>
+              <p>${text('settings.licenses.lead')}</p>
+              <div class="cl-panel">${[...FONT_NOTICES, ...current.licenses].map(notice)}</div>
+            </section>`)
+      );
+    });
+  }
+}
+
+View.register(tag, SettingsLicenses);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsLicenses;
+  }
 }

@@ -32,6 +32,7 @@ export interface ApiResource<Op extends OperationId> {
   readonly slow: Computed<boolean>;
   bind(host: Owner, input: ApiInput<Op> | (() => ApiInput<Op>)): void;
   refresh(): Promise<void>;
+  release(): void;
 }
 
 interface LayerControl {
@@ -168,7 +169,7 @@ class Handle<Op extends OperationId> implements ApiResource<Op>, Rebindable {
   private following: readonly (() => void)[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private input: ApiInput<Op> | undefined;
-  private release: (() => void) | null = null;
+  private unhold: (() => void) | null = null;
   private suspended = false;
 
   readonly value = computed(() => this.answer.value);
@@ -194,9 +195,12 @@ class Handle<Op extends OperationId> implements ApiResource<Op>, Rebindable {
       this.drop();
       this.stopClock();
       this.clear();
-      this.suspended = false;
       bound.delete(this);
     });
+  }
+
+  release(): void {
+    this.drop();
   }
 
   async refresh(): Promise<void> {
@@ -246,7 +250,7 @@ class Handle<Op extends OperationId> implements ApiResource<Op>, Rebindable {
 
   private acquire(input: ApiInput<Op>): void {
     const { key, resource: entry } = this.layer.entry(input);
-    this.release = this.layer.hold(key);
+    this.unhold = this.layer.hold(key);
     this.current = entry;
     this.following = [
       entry.value.subscribe((next) => {
@@ -275,8 +279,8 @@ class Handle<Op extends OperationId> implements ApiResource<Op>, Rebindable {
   }
 
   private drop(): void {
-    this.release?.();
-    this.release = null;
+    this.unhold?.();
+    this.unhold = null;
   }
 
   private startClock(): void {

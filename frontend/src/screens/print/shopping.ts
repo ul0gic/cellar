@@ -1,20 +1,26 @@
-import { html, render, type TemplateResult } from '@lightstart/light/html';
-import { ApiError, call } from '../../app/api.ts';
+import View from '@lightstart/light';
+import { html, nothing } from '@lightstart/light/html';
+import { apiResource } from '../../app/resources.ts';
 import { today } from '../../app/today.ts';
-import type { ScreenContext } from '../../app/types.ts';
 import { formatDate } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
 import { printedOn, toolbar } from './parts/frame.ts';
 
-export function screen(_ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('div');
-  const show = (body: TemplateResult): void => {
-    render(html`${toolbar('/list')}${body}`, element);
-  };
-  call('getShoppingList', {}).then(
-    (list) => {
+export const tag = 'cl-screen-print-shopping';
+
+class PrintShopping extends View {
+  readonly list = apiResource('getShoppingList', ['shopping']);
+
+  connected(): void {
+    this.list.bind(this, {});
+  }
+
+  render() {
+    const list = this.list.value.value;
+    const error = this.list.error.value;
+    if (list !== undefined) {
       const date = formatDate(today());
-      show(html`<article class="cl-printed">
+      return html`${toolbar('/list')}<article class="cl-printed">
         <h1 class="cl-print-title">${text('print.shoppingList')}</h1>
         <p class="cl-print-sub">
           ${list.items.length === 1 ? text('print.itemsOne', { date }) : text('print.items', { count: list.items.length, date })}
@@ -29,14 +35,19 @@ export function screen(_ctx: ScreenContext): HTMLElement {
           )}
         </ul>
         ${printedOn()}
-      </article>`);
-    },
-    (error: unknown) => {
-      if (!(error instanceof ApiError)) {
-        throw error;
-      }
-      show(html`<p class="cl-printed">${error.detail}</p>`);
-    },
-  );
-  return element;
+      </article>`;
+    }
+    if (error !== null) {
+      return html`${toolbar('/list')}<p class="cl-printed">${error.detail}</p>`;
+    }
+    return nothing;
+  }
+}
+
+View.register(tag, PrintShopping);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: PrintShopping;
+  }
 }

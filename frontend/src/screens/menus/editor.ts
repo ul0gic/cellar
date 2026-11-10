@@ -1,6 +1,5 @@
 import {
   formatMenuTokenForDisplay,
-  type ImageRef,
   type IngredientSummary,
   LIMITS,
   type Menu,
@@ -13,32 +12,40 @@ import {
 } from '@cellar/contract';
 import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
 import type { FormField, SearchDoc } from '@lightstart/components/types.js';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { batch, effect, signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
+import { type Drink, menusEditor } from '../../app/controllers/menus-editor.ts';
 import { eventChecked, eventDetail, eventText } from '../../app/events.ts';
-import { slowFlag } from '../../app/load.ts';
-import { actionFailed } from '../../app/problems.ts';
-import { invalidate } from '../../app/resources.ts';
-import { href, router } from '../../app/router.ts';
+import { type LoadPhase, loadState } from '../../app/load.ts';
+import { actionFailed, formErrors } from '../../app/problems.ts';
+import { apiResource, dataChanged, SKELETON_DELAY_MS } from '../../app/resources.ts';
+import { blockWhile, href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import type { RouteParams } from '../../app/types.ts';
+import '../../design-system/cl-live-card.ts';
+import '../../design-system/cl-plate.ts';
+import '../../design-system/cl-qr.ts';
 import { confirm } from '../../design-system/dialogs.ts';
 import { illustration } from '../../design-system/illustration.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/clipboard.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/form.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/image.ts';
+import '../../design-system/lc/input.ts';
+import '../../design-system/lc/search.ts';
+import '../../design-system/lc/switch.ts';
+import '../../design-system/lc/tag.ts';
+import { loadFailed } from '../../design-system/load-view.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
 import './editor.css';
-
-interface Drink {
-  readonly kind: 'recipe' | 'ingredient';
-  readonly refId: number;
-  readonly name: string;
-  readonly image: ImageRef | null;
-  readonly hostNote: string;
-  readonly hideWhenUnavailable: boolean;
-  readonly available: boolean;
-}
 
 interface SectionDraft {
   readonly name: string;
@@ -51,8 +58,6 @@ interface MenuDraft {
   readonly sections: readonly SectionDraft[];
 }
 
-type Phase = 'waiting' | 'slow' | 'failed' | 'missing' | 'ready';
-
 // D-1 §9.16 density tiers: grand up to 6 visible drinks, standard up to 9, compact up to 16, then 16 per page.
 const GRAND_MAX = 6;
 const STANDARD_MAX = 9;
@@ -61,9 +66,6 @@ const PAGE_SIZE = 16;
 const NOTE_COUNTER_FROM = 20;
 const PICKER_RECIPES = 6;
 const PICKER_NEAT = 4;
-
-const picked = new Map<string, Drink>();
-let suggestions: SearchDoc[] = [];
 
 function isDrink(value: unknown): value is Drink {
   return (
@@ -158,7 +160,7 @@ function tierText(count: number): string {
 
 function recipeDoc(recipe: RecipeSummary, group: string): SearchDoc {
   const id = `recipe:${recipe.id}`;
-  picked.set(id, {
+  menusEditor.remember(id, {
     kind: 'recipe',
     refId: recipe.id,
     name: recipe.name,
@@ -177,7 +179,7 @@ function recipeDoc(recipe: RecipeSummary, group: string): SearchDoc {
 
 function neatDoc(ingredient: IngredientSummary): SearchDoc {
   const id = `ingredient:${ingredient.id}`;
-  picked.set(id, {
+  menusEditor.remember(id, {
     kind: 'ingredient',
     refId: ingredient.id,
     name: ingredient.name,
@@ -226,7 +228,7 @@ function pickDrink(event: Event, onChange: (value: unknown) => void): void {
   if (typeof doc !== 'object' || doc === null || !('id' in doc) || typeof doc.id !== 'string') {
     return;
   }
-  const drink = picked.get(doc.id);
+  const drink = menusEditor.recall(doc.id);
   if (drink !== undefined) {
     onChange(drink);
   }
@@ -264,7 +266,7 @@ registerFormFieldRenderer('menu-item', (_field, value, onChange, template) => {
       placeholder=${text('menus.findPlaceholder')}
       limit=${PICKER_RECIPES + PICKER_NEAT}
       .groups=${[text('menus.groupCanMake'), text('menus.groupRecipes'), text('menus.groupNeat')]}
-      .suggestions=${suggestions}
+      .suggestions=${menusEditor.suggestions.value}
       @search-input=${(event: Event) => void findDrinks(event)}
       @search-select=${(event: Event) => pickDrink(event, onChange)}
     ></lc-search>`;
@@ -298,30 +300,174 @@ registerFormFieldRenderer('menu-item', (_field, value, onChange, template) => {
   </div>`;
 });
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  setAppBar({ back: '/menus' });
-  const element = document.createElement('section');
-  element.className = 'cl-menu-editor';
-  const id = Number(ctx.params.id);
+export const tag = 'cl-screen-menus-editor';
 
-  let phase: Phase = 'waiting';
-  let menu: Menu | null = null;
-  let formData: Record<string, unknown> = {};
-  let dirty = false;
-  let busy = false;
-  let otherLive: MenuSummary | null = null;
+class MenuEditor extends View {
+  params: RouteParams = {};
 
-  const form = (): HTMLElementTagNameMap['lc-form'] | null => element.querySelector('lc-form');
-  const draft = (): MenuDraft => readDraft(formData);
+  readonly menu = signal<Menu | null>(null);
+  readonly formData = signal<Record<string, unknown>>({});
+  readonly dirty = signal(false);
+  readonly busy = signal(false);
+  readonly asked = signal(false);
+  readonly fresh = signal(false);
+  readonly late = signal(false);
+  readonly otherLive = signal<MenuSummary | null>(null);
 
-  const apply = (next: Menu): void => {
-    menu = next;
-    formData = { ...draftOf(next) };
-    dirty = false;
-    phase = 'ready';
-  };
+  readonly menuRead = apiResource('getMenu', ['menus']);
+  readonly liveRead = apiResource('listMenus', ['menus']);
+  readonly canMakeRead = apiResource('listRecipes', ['recipes', 'shelf']);
+  readonly state = loadState([this.menuRead, this.liveRead, this.canMakeRead]);
 
-  const discardIfBlank = async (): Promise<void> => {
+  readonly fields: FormField[] = [
+    { name: 'name', type: 'text', label: text('menus.name'), required: true },
+    { name: 'date', type: 'date', label: text('menus.date'), required: true },
+    {
+      name: 'sections',
+      type: 'array',
+      label: text('menus.sections'),
+      class: 'cl-menu-sections',
+      max: LIMITS.menuSections.max,
+      addLabel: text('menus.addSection'),
+      emptyLabel: text('menus.noSections'),
+      actions: [{ label: text('menus.addAll'), icon: 'plus', onClick: () => void this.run(() => this.addAll()) }],
+      itemFields: [
+        { name: 'name', type: 'menu-section', defaultValue: text('menus.newSection') },
+        {
+          name: 'items',
+          type: 'array',
+          label: text('menus.drinksLabel'),
+          addLabel: text('menus.addDrinks'),
+          emptyLabel: text('menus.noDrinks'),
+          defaultValue: [],
+          itemField: { name: 'drink', type: 'menu-item' },
+        },
+      ],
+    },
+  ];
+
+  constructor() {
+    super();
+    menusEditor.reset();
+  }
+
+  get menuId(): number {
+    return Number(this.params.id);
+  }
+
+  get validId(): boolean {
+    return Number.isInteger(this.menuId) && this.menuId >= 1;
+  }
+
+  connected(): void {
+    setAppBar({ back: '/menus' });
+    this.classList.add('cl-menu-editor');
+    if (this.validId) {
+      this.menuRead.bind(this, { params: { id: this.menuId } });
+      if (!this.asked.peek()) {
+        this.asked.value = true;
+        if (this.menuRead.value.peek() === undefined) {
+          this.fresh.value = true;
+        } else {
+          void this.renew();
+        }
+      }
+      this.liveRead.bind(this, { query: { pageSize: 1 } });
+      this.canMakeRead.bind(this, { query: { status: 'can_make', pageSize: PICKER_RECIPES } });
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clock = effect(() => {
+      const waiting = this.asked.value && !this.fresh.value && this.menuRead.error.value === null;
+      clearTimeout(timer);
+      timer = undefined;
+      if (waiting) {
+        timer = setTimeout(() => {
+          this.late.value = true;
+        }, SKELETON_DELAY_MS);
+      } else {
+        this.late.value = false;
+      }
+    });
+    this.$own(() => {
+      clock.dispose();
+      clearTimeout(timer);
+    });
+    const fill = effect(() => {
+      const loaded = this.menuRead.value.value;
+      const live = this.liveRead.value.value;
+      const canMake = this.canMakeRead.value.value;
+      if (
+        !this.fresh.value ||
+        loaded === undefined ||
+        live === undefined ||
+        canMake === undefined ||
+        this.menu.peek() !== null
+      ) {
+        return;
+      }
+      batch(() => {
+        const first = live.items[0];
+        this.otherLive.value = first?.live && first.id !== this.menuId ? first : null;
+        menusEditor.suggestions.value = canMake.items.map((recipe) => recipeDoc(recipe, text('menus.groupCanMake')));
+        this.apply(loaded);
+      });
+    });
+    this.$own(() => fill.dispose());
+    blockWhile(
+      this,
+      () => this.dirty.value,
+      () => this.askToLeave(),
+    );
+    this.$own(() => {
+      queueMicrotask(() => {
+        if (!this.isConnected) {
+          void this.discardIfBlank();
+        }
+      });
+    });
+  }
+
+  async renew(): Promise<void> {
+    await this.menuRead.refresh();
+    this.fresh.value = this.menuRead.error.peek() === null;
+  }
+
+  retry(): void {
+    if (this.fresh.peek()) {
+      this.state.retry();
+    } else {
+      void this.renew();
+    }
+  }
+
+  phase(): LoadPhase {
+    if (this.fresh.value) {
+      return this.state.phase.value;
+    }
+    if (this.menuRead.error.value !== null) {
+      return 'failed';
+    }
+    return this.late.value ? 'slow' : 'loading';
+  }
+
+  form(): HTMLElementTagNameMap['lc-form'] | null {
+    return this.querySelector('lc-form');
+  }
+
+  draft(): MenuDraft {
+    return readDraft(this.formData.peek());
+  }
+
+  apply(next: Menu): void {
+    batch(() => {
+      this.menu.value = next;
+      this.formData.value = { ...draftOf(next) };
+      this.dirty.value = false;
+    });
+  }
+
+  async discardIfBlank(): Promise<void> {
+    const menu = this.menu.peek();
     const blank =
       menu !== null &&
       !menu.live &&
@@ -332,93 +478,71 @@ export function screen(ctx: ScreenContext): HTMLElement {
       return;
     }
     try {
-      await call('deleteMenu', { params: { id } });
+      await call('deleteMenu', { params: { id: this.menuId } });
     } catch (error) {
       if (!(error instanceof ApiError && error.code === 'not_found')) {
-        actionFailed(error, () => void discardIfBlank());
+        actionFailed(error, () => void this.discardIfBlank());
         return;
       }
     }
-    invalidate('menus');
-  };
+    dataChanged('menus');
+  }
 
-  const release = router.block(async () => {
-    if (!element.isConnected) {
-      release();
-      return true;
-    }
-    if (!dirty) {
-      release();
-      await discardIfBlank();
-      return true;
-    }
-    const leave = await confirm({
+  askToLeave(): Promise<boolean> {
+    return confirm(this, {
       title: text('menus.unsavedTitle'),
-      message: text('menus.unsavedBody', { name: draft().name || text('menus.newName') }),
+      message: text('menus.unsavedBody', { name: this.draft().name || text('menus.newName') }),
       confirmLabel: text('menus.discard'),
       cancelLabel: text('menus.keepEditing'),
       danger: true,
     });
-    if (leave) {
-      release();
-      await discardIfBlank();
-    }
-    return leave;
-  });
+  }
 
-  const run = async (work: () => Promise<void>): Promise<void> => {
-    busy = true;
-    draw();
+  async run(work: () => Promise<void>): Promise<void> {
+    this.busy.value = true;
     try {
       await work();
     } finally {
-      busy = false;
-      draw();
+      this.busy.value = false;
     }
-  };
+  }
 
-  const showFieldErrors = (error: ApiError): boolean => {
+  showFieldErrors(error: ApiError): boolean {
     if (error.code !== 'validation_failed') {
       return false;
     }
-    const top: Record<string, string> = {};
-    for (const field of error.fields) {
-      if (field.path === 'name' || field.path === 'date') {
-        top[field.path] = field.message;
-      }
-    }
-    form()?.setErrors(top);
-    const rest = error.fields.filter((field) => !(field.path in top));
+    const { fields, rest } = formErrors(error, ['name', 'date']);
+    this.form()?.setErrors(fields);
     toast({
       title: text('menus.checkFields'),
       message: rest.map((field) => field.message).join(' '),
       variant: 'error',
     });
     return true;
-  };
+  }
 
-  const save = async (): Promise<boolean> => {
-    form()?.clearErrors();
+  async save(): Promise<boolean> {
+    this.form()?.clearErrors();
     try {
-      apply(await call('replaceMenu', { params: { id }, body: menuInput(draft()) }));
-      invalidate('menus');
+      this.apply(await call('replaceMenu', { params: { id: this.menuId }, body: menuInput(this.draft()) }));
+      dataChanged('menus');
       return true;
     } catch (error) {
-      if (!(error instanceof ApiError && showFieldErrors(error))) {
-        actionFailed(error, () => void run(saveAndSay));
+      if (!(error instanceof ApiError && this.showFieldErrors(error))) {
+        actionFailed(error, () => void this.run(() => this.saveAndSay()));
       }
       return false;
     }
-  };
+  }
 
-  const saveAndSay = async (): Promise<void> => {
-    if (await save()) {
+  async saveAndSay(): Promise<void> {
+    if (await this.save()) {
       toast({ title: text('menus.saved') });
     }
-  };
+  }
 
-  const addAll = async (): Promise<void> => {
-    const current = draft();
+  async addAll(): Promise<void> {
+    const current = this.draft();
     if (current.sections.length >= LIMITS.menuSections.max) {
       toast({ title: text('menus.addAllFull'), variant: 'error' });
       return;
@@ -437,7 +561,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
         toast({ title: page.facets.canMake === 0 ? text('menus.addAllNone') : text('menus.addAllAlready') });
         return;
       }
-      const sure = await confirm({
+      const sure = await confirm(this, {
         title: count === 1 ? text('menus.addOneTitle') : text('menus.addAllTitle', { count }),
         message: text('menus.addAllBody'),
         confirmLabel: count === 1 ? text('menus.addOneConfirm') : text('menus.addAllConfirm', { count }),
@@ -446,14 +570,14 @@ export function screen(ctx: ScreenContext): HTMLElement {
         return;
       }
       const sections = [...current.sections, { name: text('menus.everythingElse'), items: [] }];
-      form()?.clearErrors();
-      await call('replaceMenu', { params: { id }, body: menuInput({ ...current, sections }) });
+      this.form()?.clearErrors();
+      await call('replaceMenu', { params: { id: this.menuId }, body: menuInput({ ...current, sections }) });
       const result = await call('addMakeableToMenu', {
-        params: { id },
+        params: { id: this.menuId },
         body: { sectionIndex: sections.length - 1 },
       });
-      apply(result.menu);
-      invalidate('menus');
+      this.apply(result.menu);
+      dataChanged('menus');
       const addedDrinks = result.added === 1 ? text('menus.drink') : text('menus.drinks', { count: result.added });
       toast({
         title:
@@ -462,39 +586,40 @@ export function screen(ctx: ScreenContext): HTMLElement {
             : text('menus.addAllSkipped', { drinks: addedDrinks, skipped: result.skippedForLimit }),
       });
     } catch (error) {
-      if (!(error instanceof ApiError && showFieldErrors(error))) {
-        actionFailed(error, () => void run(addAll));
+      if (!(error instanceof ApiError && this.showFieldErrors(error))) {
+        actionFailed(error, () => void this.run(() => this.addAll()));
       }
     }
-  };
+  }
 
-  const makeLive = async (): Promise<void> => {
-    if (otherLive !== null) {
-      const sure = await confirm({
-        title: text('menus.makeLiveTitle', { name: draft().name }),
-        message: text('menus.makeLiveBody', { other: otherLive.name }),
+  async makeLive(): Promise<void> {
+    const other = this.otherLive.peek();
+    if (other !== null) {
+      const sure = await confirm(this, {
+        title: text('menus.makeLiveTitle', { name: this.draft().name }),
+        message: text('menus.makeLiveBody', { other: other.name }),
         confirmLabel: text('menus.makeLive'),
       });
       if (!sure) {
         return;
       }
     }
-    if (dirty && !(await save())) {
+    if (this.dirty.peek() && !(await this.save())) {
       return;
     }
     try {
-      apply(await call('makeMenuLive', { params: { id } }));
-      otherLive = null;
-      invalidate('menus');
-      toast({ title: text('menus.madeLive', { name: draft().name }) });
+      this.apply(await call('makeMenuLive', { params: { id: this.menuId } }));
+      this.otherLive.value = null;
+      dataChanged('menus');
+      toast({ title: text('menus.madeLive', { name: this.draft().name }) });
     } catch (error) {
-      actionFailed(error, () => void run(makeLive));
+      actionFailed(error, () => void this.run(() => this.makeLive()));
     }
-  };
+  }
 
-  const endLive = async (): Promise<void> => {
-    const name = menu?.name ?? '';
-    const sure = await confirm({
+  async endLive(): Promise<void> {
+    const name = this.menu.peek()?.name ?? '';
+    const sure = await confirm(this, {
       title: text('menus.endTitle', { name }),
       message: text('menus.endBody'),
       confirmLabel: text('menus.endMenu'),
@@ -505,17 +630,16 @@ export function screen(ctx: ScreenContext): HTMLElement {
       return;
     }
     try {
-      const ended = await call('endMenu', { params: { id } });
-      menu = ended;
-      invalidate('menus');
+      this.menu.value = await call('endMenu', { params: { id: this.menuId } });
+      dataChanged('menus');
       toast({ title: text('menus.ended', { name }) });
     } catch (error) {
-      actionFailed(error, () => void run(endLive));
+      actionFailed(error, () => void this.run(() => this.endLive()));
     }
-  };
+  }
 
-  const rotate = async (): Promise<void> => {
-    const sure = await confirm({
+  async rotate(): Promise<void> {
+    const sure = await confirm(this, {
       title: text('menus.rotateTitle'),
       message: text('menus.rotateBody'),
       confirmLabel: text('menus.rotateConfirm'),
@@ -525,52 +649,24 @@ export function screen(ctx: ScreenContext): HTMLElement {
       return;
     }
     try {
-      menu = await call('rotateMenuLink', { params: { id } });
-      invalidate('menus');
+      this.menu.value = await call('rotateMenuLink', { params: { id: this.menuId } });
+      dataChanged('menus');
       toast({ title: text('menus.rotated') });
     } catch (error) {
-      actionFailed(error, () => void run(rotate));
+      actionFailed(error, () => void this.run(() => this.rotate()));
     }
-  };
+  }
 
-  const fields: FormField[] = [
-    { name: 'name', type: 'text', label: text('menus.name'), required: true },
-    { name: 'date', type: 'date', label: text('menus.date'), required: true },
-    {
-      name: 'sections',
-      type: 'array',
-      label: text('menus.sections'),
-      class: 'cl-menu-sections',
-      max: LIMITS.menuSections.max,
-      addLabel: text('menus.addSection'),
-      emptyLabel: text('menus.noSections'),
-      actions: [{ label: text('menus.addAll'), icon: 'plus', onClick: () => void run(addAll) }],
-      itemFields: [
-        { name: 'name', type: 'menu-section', defaultValue: text('menus.newSection') },
-        {
-          name: 'items',
-          type: 'array',
-          label: text('menus.drinksLabel'),
-          addLabel: text('menus.addDrinks'),
-          emptyLabel: text('menus.noDrinks'),
-          defaultValue: [],
-          itemField: { name: 'drink', type: 'menu-item' },
-        },
-      ],
-    },
-  ];
-
-  const onFieldChange = (): void => {
-    const current = form();
+  onFieldChange(): void {
+    const current = this.form();
     if (current === null) {
       return;
     }
-    formData = current.data;
-    dirty = true;
-    draw();
-  };
+    this.formData.value = current.data;
+    this.dirty.value = true;
+  }
 
-  const linkPanel = (live: Menu): TemplateResult => {
+  linkPanel(live: Menu, onTv: number): TemplateResult {
     if (live.link === null) {
       return html``;
     }
@@ -595,117 +691,89 @@ export function screen(ctx: ScreenContext): HTMLElement {
         <cl-qr value=${url}></cl-qr>
         <p class="cl-menu-panel-text">${text('menus.qrHint')}</p>
       </div>
-      <p class="cl-menu-panel-text cl-menu-tier" aria-live="polite">${tierText(shownOnTv(draft()))}</p>
+      <p class="cl-menu-panel-text cl-menu-tier" aria-live="polite">${tierText(onTv)}</p>
       <div class="cl-menu-panel-actions">
         <lc-button variant="quiet" @click=${() => window.open(url, '_blank', 'noopener')}>
           <lc-icon name="external-link" aria-hidden="true"></lc-icon>${text('menus.openDisplay')}
         </lc-button>
-        <lc-button variant="quiet" ?disabled=${busy} @click=${() => void run(rotate)}>
+        <lc-button variant="quiet" ?disabled=${this.busy.value} @click=${() => void this.run(() => this.rotate())}>
           <lc-icon name="refresh-cw" aria-hidden="true"></lc-icon>${text('menus.newLink')}
         </lc-button>
-        <lc-button variant="quiet" class="cl-menu-end" ?disabled=${busy} @click=${() => void run(endLive)}>
+        <lc-button variant="quiet" class="cl-menu-end" ?disabled=${this.busy.value} @click=${() => void this.run(() => this.endLive())}>
           ${text('menus.endMenu')}
         </lc-button>
       </div>
     `;
-  };
+  }
 
-  const draftPanel = (): TemplateResult => html`
-    <h2 class="cl-menu-panel-title">${text('menus.draftTitle')}</h2>
-    <p class="cl-menu-panel-text">
-      ${otherLive === null ? text('menus.draftBody') : text('menus.draftBodyOther', { name: otherLive.name })}
-    </p>
-    <p class="cl-menu-panel-text cl-menu-tier" aria-live="polite">${tierText(shownOnTv(draft()))}</p>
-    <lc-button variant="primary" class="cl-menu-make-live" ?disabled=${busy} @click=${() => void run(makeLive)}>
-      <lc-icon name="tv" aria-hidden="true"></lc-icon>${text('menus.makeLive')}
-    </lc-button>
-  `;
+  draftPanel(onTv: number): TemplateResult {
+    const other = this.otherLive.value;
+    return html`
+      <h2 class="cl-menu-panel-title">${text('menus.draftTitle')}</h2>
+      <p class="cl-menu-panel-text">
+        ${other === null ? text('menus.draftBody') : text('menus.draftBodyOther', { name: other.name })}
+      </p>
+      <p class="cl-menu-panel-text cl-menu-tier" aria-live="polite">${tierText(onTv)}</p>
+      <lc-button variant="primary" class="cl-menu-make-live" ?disabled=${this.busy.value} @click=${() => void this.run(() => this.makeLive())}>
+        <lc-icon name="tv" aria-hidden="true"></lc-icon>${text('menus.makeLive')}
+      </lc-button>
+    `;
+  }
 
-  const failedState = (): TemplateResult => html`<lc-empty-state
-    title=${text('loadFailed.title', { screen: text('title.menu') })}
-    description=${text('loadFailed.body')}
-  >
-    ${illustration('empty-lost')}
-    <lc-button variant="primary" @click=${() => void load()}>${text('loadFailed.retry')}</lc-button>
-  </lc-empty-state>`;
+  missingState(): TemplateResult {
+    return html`<lc-empty-state title=${text('menus.notFoundTitle')} description=${text('menus.notFoundBody')}>
+      ${illustration('empty-menu')}
+      <lc-button variant="primary" href=${href('/menus')}>${text('menus.backToMenus')}</lc-button>
+    </lc-empty-state>`;
+  }
 
-  const missingState = (): TemplateResult => html`<lc-empty-state
-    title=${text('menus.notFoundTitle')}
-    description=${text('menus.notFoundBody')}
-  >
-    ${illustration('empty-menu')}
-    <lc-button variant="primary" href=${href('/menus')}>${text('menus.backToMenus')}</lc-button>
-  </lc-empty-state>`;
-
-  const editor = (current: Menu): TemplateResult => {
-    const onTv = shownOnTv(draft());
+  editor(current: Menu): TemplateResult {
+    const onTv = shownOnTv(readDraft(this.formData.value));
     return html`
       <div class="cl-menu-edit">
         <div class="cl-menu-main">
           <h1 class="cl-vh">${current.name}</h1>
-          <lc-form .fields=${fields} .data=${formData} @field-change=${onFieldChange}></lc-form>
+          <lc-form .fields=${this.fields} .data=${this.formData.value} @field-change=${() => this.onFieldChange()}></lc-form>
           ${onTv > PAGE_SIZE ? html`<lc-alert variant="info" title=${text('menus.pagedNotice')}></lc-alert>` : nothing}
           <div class="cl-menu-save">
-            <lc-button variant="primary" ?disabled=${!dirty || busy} @click=${() => void run(saveAndSay)}>
+            <lc-button variant="primary" ?disabled=${!this.dirty.value || this.busy.value} @click=${() => void this.run(() => this.saveAndSay())}>
               ${text('menus.save')}
             </lc-button>
           </div>
         </div>
         <aside class="cl-menu-panel" aria-label=${current.live ? text('menus.liveTitle') : text('menus.draftTitle')}>
-          ${current.live ? linkPanel(current) : draftPanel()}
+          ${current.live ? this.linkPanel(current, onTv) : this.draftPanel(onTv)}
         </aside>
       </div>
     `;
-  };
-
-  function draw(): void {
-    let content: TemplateResult | HTMLElement;
-    if (phase === 'failed') {
-      content = failedState();
-    } else if (phase === 'missing') {
-      content = missingState();
-    } else if (menu === null) {
-      content = phase === 'slow' ? skeleton('lines', text('title.menu')) : html``;
-    } else {
-      content = editor(menu);
-    }
-    render(html`${content}`, element);
   }
 
-  async function load(): Promise<void> {
-    if (!Number.isInteger(id) || id < 1) {
-      phase = 'missing';
-      draw();
-      return;
+  render() {
+    if (!this.validId) {
+      return this.missingState();
     }
-    phase = 'waiting';
-    draw();
-    slowFlag(() => {
-      if (phase === 'waiting') {
-        phase = 'slow';
-        draw();
-      }
-    });
-    try {
-      const [loaded, live, can] = await Promise.all([
-        call('getMenu', { params: { id } }),
-        call('listMenus', { query: { pageSize: 1 } }),
-        call('listRecipes', { query: { status: 'can_make', pageSize: PICKER_RECIPES } }),
-      ]);
-      const first = live.items[0];
-      otherLive = first?.live && first.id !== id ? first : null;
-      picked.clear();
-      suggestions = can.items.map((recipe) => recipeDoc(recipe, text('menus.groupCanMake')));
-      apply(loaded);
-    } catch (error) {
-      if (!(error instanceof ApiError)) {
-        throw error;
-      }
-      phase = error.code === 'not_found' ? 'missing' : 'failed';
+    const current = this.menu.value;
+    if (current !== null) {
+      return this.editor(current);
     }
-    draw();
+    switch (this.phase()) {
+      case 'failed':
+        return this.menuRead.error.value?.code === 'not_found'
+          ? this.missingState()
+          : loadFailed(text('title.menu'), () => this.retry(), 'none');
+      case 'slow':
+        return html`${skeleton('lines', text('title.menu'))}`;
+      case 'loading':
+      case 'ready':
+        return html``;
+    }
   }
+}
 
-  void load();
-  return element;
+View.register(tag, MenuEditor);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: MenuEditor;
+  }
 }

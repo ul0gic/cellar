@@ -1,8 +1,14 @@
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { call } from '../../../app/api.ts';
 import { eventText } from '../../../app/events.ts';
 import { actionFailed } from '../../../app/problems.ts';
+import type { OverlayHost } from '../../../app/types.ts';
 import { text } from '../../../text/index.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/input.ts';
+import '../../../design-system/lc/segmented.ts';
+import '../../../design-system/lc/select.ts';
 import {
   apiQuery,
   type ListFilters,
@@ -58,64 +64,74 @@ function chips(
   </fieldset>`;
 }
 
-export async function openFilterSheet(state: ListState, apply: (result: FilterSheetResult) => void): Promise<void> {
+export async function openFilterSheet(
+  host: OverlayHost,
+  state: ListState,
+  apply: (result: FilterSheetResult) => void,
+): Promise<void> {
   const [glasses, methods, tags, collections] = await Promise.all([
     call('listGlasses', {}),
     call('listMethods', {}),
     call('listTags', {}),
     call('listCollections', {}),
   ]);
+  if (!host.isConnected) {
+    return;
+  }
   const asChoices = (items: readonly { id: number; name: string }[]): Choice[] =>
     items.map((item) => ({ id: String(item.id), name: item.name }));
   const glassChoices = asChoices(glasses.items);
   const methodChoices = asChoices(methods.items);
   const tagChoices = asChoices(tags.items);
-  let filters: ListFilters = state.filters;
-  let sort: Sort = state.sort;
-  let tagSearch = '';
-  let count: number | null = null;
-  let counting = 0;
+  const filters = signal<ListFilters>(state.filters);
+  const sort = signal<Sort>(state.sort);
+  const tagSearch = signal('');
+  const count = signal<number | null>(null);
+  const counting = signal(0);
 
   const recount = async (): Promise<void> => {
-    const run = ++counting;
+    counting.value += 1;
+    const run = counting.peek();
     const status: Status = state.status;
-    const page = await call('listRecipes', { query: apiQuery({ ...state, status, filters, sort, page: 1 }, 1) });
-    if (run === counting) {
-      count = page.total;
-      sheet.redraw();
+    const page = await call('listRecipes', {
+      query: apiQuery({ ...state, status, filters: filters.peek(), sort: sort.peek(), page: 1 }, 1),
+    });
+    if (run === counting.peek()) {
+      count.value = page.total;
     }
   };
 
   const change = (next: ListFilters): void => {
-    filters = next;
-    sheet.redraw();
+    filters.value = next;
     recount().catch((error: unknown) => actionFailed(error, () => void recount()));
   };
 
   const visibleTags = (): Choice[] =>
     tagChoices.filter(
-      (tag) => filters.tag.includes(tag.id) || tagSearch === '' || tag.name.toLowerCase().includes(tagSearch),
+      (tag) =>
+        filters.value.tag.includes(tag.id) ||
+        tagSearch.value === '' ||
+        tag.name.toLowerCase().includes(tagSearch.value),
     );
 
-  const sheet = openSheet({
+  const sheet = openSheet(host, {
     heading: () => text('recipes.filters'),
     body: () => html`
       <lc-select
         label=${text('recipes.sortBy')}
-        value=${sort}
+        value=${sort.value}
         .options=${sortsFor(state.q).map((value) => ({ value, label: text(SORT_KEYS[value]) }))}
         @change=${(event: Event) => {
-          sort = sortsFor(state.q).find((value) => value === eventText(event)) ?? sort;
-          sheet.redraw();
+          sort.value = sortsFor(state.q).find((value) => value === eventText(event)) ?? sort.peek();
         }}
       ></lc-select>
-      ${glassChoices.length === 0 ? nothing : chips(text('recipes.filterGlass'), glassChoices, filters.glass, (id) => change({ ...filters, glass: toggled(filters.glass, id) }))}
-      ${methodChoices.length === 0 ? nothing : chips(text('recipes.filterMethod'), methodChoices, filters.method, (id) => change({ ...filters, method: toggled(filters.method, id) }))}
+      ${glassChoices.length === 0 ? nothing : chips(text('recipes.filterGlass'), glassChoices, filters.value.glass, (id) => change({ ...filters.peek(), glass: toggled(filters.peek().glass, id) }))}
+      ${methodChoices.length === 0 ? nothing : chips(text('recipes.filterMethod'), methodChoices, filters.value.method, (id) => change({ ...filters.peek(), method: toggled(filters.peek().method, id) }))}
       <div class="cl-sheet-section">
         <span class="cl-sheet-label" aria-hidden="true">${text('recipes.filterRating')}</span>
         <lc-segmented
           label=${text('recipes.filterRating')}
-          value=${filters.ratingMin === null ? 'any' : String(filters.ratingMin)}
+          value=${filters.value.ratingMin === null ? 'any' : String(filters.value.ratingMin)}
           .options=${[
             { value: 'any', label: text('recipes.ratingAny') },
             ...RATING_CHOICES.map((value) => ({
@@ -125,7 +141,7 @@ export async function openFilterSheet(state: ListState, apply: (result: FilterSh
           ]}
           @change=${(event: Event) => {
             const picked = Number(eventText(event));
-            change({ ...filters, ratingMin: RATING_CHOICES.find((value) => value === picked) ?? null });
+            change({ ...filters.peek(), ratingMin: RATING_CHOICES.find((value) => value === picked) ?? null });
           }}
         ></lc-segmented>
       </div>
@@ -137,16 +153,16 @@ export async function openFilterSheet(state: ListState, apply: (result: FilterSh
             type="number"
             min="0"
             max="100"
-            value=${filters.abvMin ?? ''}
-            @change=${(event: Event) => change({ ...filters, abvMin: eventText(event).trim() || null })}
+            value=${filters.value.abvMin ?? ''}
+            @change=${(event: Event) => change({ ...filters.peek(), abvMin: eventText(event).trim() || null })}
           ></lc-input>
           <lc-input
             label=${text('recipes.abvHighest')}
             type="number"
             min="0"
             max="100"
-            value=${filters.abvMax ?? ''}
-            @change=${(event: Event) => change({ ...filters, abvMax: eventText(event).trim() || null })}
+            value=${filters.value.abvMax ?? ''}
+            @change=${(event: Event) => change({ ...filters.peek(), abvMax: eventText(event).trim() || null })}
           ></lc-input>
         </div>
       </fieldset>
@@ -156,22 +172,21 @@ export async function openFilterSheet(state: ListState, apply: (result: FilterSh
           : html`<lc-input
                 label=${text('recipes.filterTags')}
                 placeholder=${text('recipes.tagsPlaceholder')}
-                value=${tagSearch}
+                value=${tagSearch.value}
                 @input=${(event: Event) => {
-                  tagSearch = eventText(event).trim().toLowerCase();
-                  sheet.redraw();
+                  tagSearch.value = eventText(event).trim().toLowerCase();
                 }}
               ></lc-input>
-              ${chips(text('recipes.filterTags'), visibleTags(), filters.tag, (id) => change({ ...filters, tag: toggled(filters.tag, id) }))}`
+              ${chips(text('recipes.filterTags'), visibleTags(), filters.value.tag, (id) => change({ ...filters.peek(), tag: toggled(filters.peek().tag, id) }))}`
       }
       <lc-select
         label=${text('recipes.filterCollection')}
-        value=${filters.collection ?? ''}
+        value=${filters.value.collection ?? ''}
         .options=${[
           { value: '', label: text('recipes.anyCollection') },
           ...collections.collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
         ]}
-        @change=${(event: Event) => change({ ...filters, collection: eventText(event) || null })}
+        @change=${(event: Event) => change({ ...filters.peek(), collection: eventText(event) || null })}
       ></lc-select>
     `,
     footer: () => html`
@@ -180,9 +195,9 @@ export async function openFilterSheet(state: ListState, apply: (result: FilterSh
         variant="primary"
         @click=${() => {
           sheet.close();
-          apply({ filters, sort });
+          apply({ filters: filters.peek(), sort: sort.peek() });
         }}
-      >${count === null ? text('recipes.showResults') : text(count === 1 ? 'recipes.showCountOne' : 'recipes.showCount', { count })}</lc-button>
+      >${count.value === null ? text('recipes.showResults') : text(count.value === 1 ? 'recipes.showCountOne' : 'recipes.showCount', { count: count.value })}</lc-button>
     `,
   });
   recount().catch((error: unknown) => actionFailed(error, () => void recount()));

@@ -1,7 +1,9 @@
 import type { PartyResult } from '@cellar/contract';
-import { html, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { route } from '../../app/controllers/route.ts';
 import { text } from '../../text/index.ts';
 import { countsText, mlText, ozText, readPlan, servingsFor } from '../party/parts/party-state.ts';
 import { printedOn, toolbar } from './parts/frame.ts';
@@ -14,13 +16,32 @@ function servingsLine(result: PartyResult, same: boolean, servings: number): str
       });
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('div');
-  const plan = readPlan(ctx.query);
-  const show = (body: TemplateResult): void => {
-    render(html`${toolbar(`/party${location.search}`)}${body}`, element);
-  };
-  const load = async (): Promise<void> => {
+export const tag = 'cl-screen-print-party';
+
+type Shown =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'message'; readonly body: TemplateResult }
+  | { readonly kind: 'ready'; readonly title: string; readonly result: PartyResult };
+
+class PrintParty extends View {
+  readonly plan = readPlan(route.query.peek());
+  readonly shown = signal<Shown>({ kind: 'loading' });
+  private started = false;
+
+  connected(): void {
+    if (!this.started) {
+      this.started = true;
+      this.load().catch((error: unknown) => {
+        if (!(error instanceof ApiError)) {
+          throw error;
+        }
+        this.shown.value = { kind: 'message', body: html`<p class="cl-printed">${error.detail}</p>` };
+      });
+    }
+  }
+
+  async load(): Promise<void> {
+    const { plan } = this;
     let ids = plan.recipeIds;
     let title = text('print.party');
     if (plan.collectionId !== null) {
@@ -29,15 +50,19 @@ export function screen(ctx: ScreenContext): HTMLElement {
       title = collection.name;
     }
     if (ids.length === 0) {
-      show(html`<p class="cl-printed">${text('print.empty')}</p>`);
+      this.shown.value = { kind: 'message', body: html`<p class="cl-printed">${text('print.empty')}</p>` };
       return;
     }
     const result = await call('calculateParty', {
       body: { recipes: ids.map((recipeId) => ({ recipeId, servings: servingsFor(plan, recipeId) })) },
     });
-    show(html`<article class="cl-printed">
+    this.shown.value = { kind: 'ready', title, result };
+  }
+
+  sheet(title: string, result: PartyResult): TemplateResult {
+    return html`<article class="cl-printed">
       <h1 class="cl-print-title">${title}</h1>
-      <p class="cl-print-sub">${servingsLine(result, plan.same, plan.servings)}</p>
+      <p class="cl-print-sub">${servingsLine(result, this.plan.same, this.plan.servings)}</p>
       <table class="cl-print-table">
         <thead>
           <tr>
@@ -62,13 +87,26 @@ export function screen(ctx: ScreenContext): HTMLElement {
         </tbody>
       </table>
       ${printedOn()}
-    </article>`);
-  };
-  load().catch((error: unknown) => {
-    if (!(error instanceof ApiError)) {
-      throw error;
+    </article>`;
+  }
+
+  render() {
+    const shown = this.shown.value;
+    switch (shown.kind) {
+      case 'loading':
+        return nothing;
+      case 'message':
+        return html`${toolbar(`/party${location.search}`)}${shown.body}`;
+      case 'ready':
+        return html`${toolbar(`/party${location.search}`)}${this.sheet(shown.title, shown.result)}`;
     }
-    show(html`<p class="cl-printed">${error.detail}</p>`);
-  });
-  return element;
+  }
+}
+
+View.register(tag, PrintParty);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: PrintParty;
+  }
 }

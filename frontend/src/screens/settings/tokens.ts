@@ -1,19 +1,36 @@
 import type { ApiToken, CreatedApiToken } from '@cellar/contract';
-import { html, nothing, render } from '@lightstart/light/html';
+import type { FormField } from '@lightstart/components/types.js';
+import View from '@lightstart/light';
+import { html, nothing } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
-import { eventText } from '../../app/events.ts';
-import { watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed, problemText } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { setAppBar } from '../../app/shell.ts';
+import { formValues, valueText } from '../../app/events.ts';
 import { confirm } from '../../design-system/dialogs.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatDate } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { settingsPage } from './parts/frame.ts';
-import { loadFailed } from './parts/load-failed.ts';
-import { openSheet } from './parts/sheet.ts';
+import { settingsFrame, settingsLoad } from './parts/frame.ts';
+import { openSheet, type Sheet } from './parts/sheet.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/clipboard.ts';
+import '../../design-system/lc/form.ts';
+import '../../design-system/lc/icon.ts';
+
+export const tag = 'cl-screen-settings-tokens';
+
+const NAME_FIELDS: FormField[] = [
+  {
+    name: 'name',
+    type: 'text',
+    label: text('settings.tokens.name'),
+    placeholder: text('settings.tokens.namePlaceholder'),
+  },
+];
 
 function usage(token: ApiToken): string {
   const created = text('settings.tokens.created', { date: formatDate(token.createdAt) });
@@ -22,89 +39,98 @@ function usage(token: ApiToken): string {
     : `${created} ${text('settings.tokens.lastUsed', { date: formatDate(token.lastUsedAt) })}`;
 }
 
-function newToken(created: (token: CreatedApiToken) => void): void {
-  let name = '';
-  let error = '';
-  let busy = false;
-  const submit = async (): Promise<void> => {
-    const trimmed = name.trim();
-    error = trimmed.length === 0 ? text('settings.tokens.nameMissing') : '';
-    if (error !== '') {
-      sheet.redraw();
+class SettingsTokens extends View {
+  readonly tokens = apiResource('listMyTokens', ['settings']);
+  readonly state = loadState([this.tokens]);
+  readonly created = signal<CreatedApiToken | null>(null);
+
+  connected(): void {
+    this.classList.add('cl-settings');
+    setAppBar({ back: '/more' });
+    this.tokens.bind(this, {});
+  }
+
+  private async revoke(token: ApiToken): Promise<void> {
+    if (!this.isConnected) {
       return;
     }
-    busy = true;
-    sheet.redraw();
-    try {
-      created(await call('createMyToken', { body: { name: trimmed } }));
-      invalidate('settings');
-      sheet.close();
-    } catch (failure) {
-      if (failure instanceof ApiError && (failure.code === 'token_limit' || failure.code === 'validation_failed')) {
-        error = problemText(failure);
-      } else {
-        actionFailed(failure, () => void submit());
-      }
-    } finally {
-      busy = false;
+    const sure = await confirm(this, {
+      title: text('settings.tokens.revokeTitle', { name: token.name }),
+      message: text('settings.tokens.revokeBody'),
+      confirmLabel: text('settings.tokens.revokeConfirm'),
+      danger: true,
+    });
+    if (!sure) {
+      return;
     }
-    sheet.redraw();
-  };
-  const sheet = openSheet(text('settings.tokens.new'), () => ({
-    body: html`<form
-      class="cl-sheet-form"
-      novalidate
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
-        if (!busy) {
-          void submit();
-        }
-      }}
-    >
-      <lc-input
-        label=${text('settings.tokens.name')}
-        placeholder=${text('settings.tokens.namePlaceholder')}
-        .value=${name}
-        error-message=${error}
-        @input=${(event: Event) => {
-          name = eventText(event);
-        }}
-      ></lc-input>
-    </form>`,
-    footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
-      <lc-button variant="primary" ?disabled=${busy} @click=${() => void submit()}
-        >${text('settings.tokens.create')}</lc-button
-      >`,
-  }));
-}
+    try {
+      await call('revokeMyToken', { params: { id: token.id } });
+      dataChanged('settings');
+      if (this.isConnected && this.created.peek()?.id === token.id) {
+        this.created.value = null;
+      }
+    } catch (error) {
+      actionFailed(error, () => void this.revoke(token));
+    }
+  }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  return settingsPage(ctx, 'tokens', (main) => {
-    const tokens = resourceFor('listMyTokens', {}, { tags: ['settings'] });
-    let created: CreatedApiToken | null = null;
-
-    const revoke = async (token: ApiToken): Promise<void> => {
-      const sure = await confirm({
-        title: text('settings.tokens.revokeTitle', { name: token.name }),
-        message: text('settings.tokens.revokeBody'),
-        confirmLabel: text('settings.tokens.revokeConfirm'),
-        danger: true,
-      });
-      if (!sure) {
+  private newToken(): void {
+    const fieldValues = signal<Record<string, unknown>>({});
+    const fieldErrors = signal<Record<string, string>>({});
+    const working = signal(false);
+    const submit = async (): Promise<void> => {
+      const trimmed = valueText(fieldValues.peek(), 'name').trim();
+      if (trimmed.length === 0) {
+        fieldErrors.value = { name: text('settings.tokens.nameMissing') };
         return;
       }
+      fieldErrors.value = {};
+      working.value = true;
       try {
-        await call('revokeMyToken', { params: { id: token.id } });
-        if (created?.id === token.id) {
-          created = null;
+        const token = await call('createMyToken', { body: { name: trimmed } });
+        dataChanged('settings');
+        if (this.isConnected) {
+          this.created.value = token;
         }
-        invalidate('settings');
-      } catch (error) {
-        actionFailed(error, () => void revoke(token));
+        sheet.close();
+      } catch (failure) {
+        if (failure instanceof ApiError && (failure.code === 'token_limit' || failure.code === 'validation_failed')) {
+          fieldErrors.value = { name: problemText(failure) };
+        } else {
+          actionFailed(failure, () => void submit());
+        }
+      } finally {
+        working.value = false;
       }
     };
+    const sheet: Sheet = openSheet(this, text('settings.tokens.new'), () => ({
+      body: html`<lc-form
+        class="cl-settings-form"
+        layout="stacked"
+        .fields=${NAME_FIELDS}
+        .data=${fieldValues.value}
+        .errors=${fieldErrors.value}
+        @field-change=${(event: Event) => {
+          const values = formValues(event);
+          if (values !== null) {
+            fieldValues.value = values;
+          }
+        }}
+        @form-submit=${() => {
+          if (!working.peek()) {
+            void submit();
+          }
+        }}
+      ></lc-form>`,
+      footer: html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
+        <lc-button variant="primary" ?disabled=${working.value} @click=${() => void submit()}
+          >${text('settings.tokens.create')}</lc-button
+        >`,
+    }));
+  }
 
-    const reveal = (token: CreatedApiToken) => html`<lc-alert
+  private reveal(token: CreatedApiToken) {
+    return html`<lc-alert
       class="cl-settings-banner"
       variant="info"
       icon="key-round"
@@ -120,11 +146,14 @@ export function screen(ctx: ScreenContext): HTMLElement {
         ></lc-clipboard>
       </div>
     </lc-alert>`;
+  }
 
-    const view = (list: readonly ApiToken[]) => html`<section class="cl-sgroup" aria-labelledby="settings-tokens">
+  private view(list: readonly ApiToken[]) {
+    const shown = this.created.value;
+    return html`<section class="cl-sgroup" aria-labelledby="settings-tokens">
       <h2 id="settings-tokens">${text('settings.tokens')}</h2>
       <p>${text('settings.tokens.lead')}</p>
-      ${created === null ? nothing : reveal(created)}
+      ${shown === null ? nothing : this.reveal(shown)}
       ${
         list.length === 0
           ? html`<p class="cl-muted">${text('settings.tokens.none')}</p>`
@@ -135,7 +164,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                   <lc-button
                     variant="ghost"
                     aria-label=${text('settings.tokens.revokeNamed', { name: token.name })}
-                    @click=${() => void revoke(token)}
+                    @click=${() => void this.revoke(token)}
                     >${text('settings.tokens.revoke')}</lc-button
                   >
                 </div>`,
@@ -143,28 +172,28 @@ export function screen(ctx: ScreenContext): HTMLElement {
             </div>`
       }
       <div class="cl-actions">
-        <lc-button
-          variant="quiet"
-          @click=${() =>
-            newToken((token) => {
-              created = token;
-              redraw();
-            })}
-        >
+        <lc-button variant="quiet" @click=${() => this.newToken()}>
           <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('settings.tokens.new')}
         </lc-button>
       </div>
     </section>`;
+  }
 
-    const { redraw } = watch(main, [tokens], ({ phase, retry }) => {
-      const list = tokens.peek();
-      if (phase === 'failed') {
-        render(loadFailed(text('settings.tokens'), retry), main);
-      } else if (phase === 'slow') {
-        render(skeleton('rows', text('settings.tokens')), main);
-      } else if (phase === 'ready' && list !== undefined) {
-        render(view(list.tokens), main);
-      }
+  render() {
+    return settingsFrame('tokens', () => {
+      const list = this.tokens.value.value;
+      return (
+        settingsLoad(this.state, text('settings.tokens'), 'rows') ??
+        (list === undefined ? nothing : this.view(list.tokens))
+      );
     });
-  });
+  }
+}
+
+View.register(tag, SettingsTokens);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsTokens;
+  }
 }

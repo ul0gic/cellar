@@ -1,15 +1,24 @@
 import { buildPath, type Job, RESTORE_CONFIRMATION, type RestoreUpload } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
+import { session } from '../../app/controllers/session.ts';
 import { eventFile } from '../../app/events.ts';
 import { actionFailed, problemText } from '../../app/problems.ts';
-import { href } from '../../app/router.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { href, navigate } from '../../app/router.ts';
+import { setAppBar } from '../../app/shell.ts';
 import { confirmTyped } from '../../design-system/dialogs.ts';
 import { formatCount, formatDate } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { settingsPage } from './parts/frame.ts';
+import { settingsFrame } from './parts/frame.ts';
 import { followJob } from './parts/job.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/file-upload.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/progress-bar.ts';
+
+export const tag = 'cl-screen-settings-backup';
 
 type Phase =
   | { readonly kind: 'idle' }
@@ -37,91 +46,81 @@ function summary(file: string, upload: RestoreUpload): string {
   });
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  return settingsPage(ctx, 'backup', (main) => {
-    let phase: Phase = { kind: 'idle' };
+class SettingsBackup extends View {
+  readonly phase = signal<Phase>({ kind: 'idle' });
 
-    const restore = async (file: string, upload: RestoreUpload): Promise<void> => {
-      phase = { kind: 'restoring', file, job: null };
-      draw();
-      const started = await call('startRestore', {
-        body: { uploadId: upload.uploadId, confirmation: RESTORE_CONFIRMATION },
+  connected(): void {
+    this.classList.add('cl-settings');
+    setAppBar({ back: '/more' });
+  }
+
+  private async restore(file: string, upload: RestoreUpload): Promise<void> {
+    this.phase.value = { kind: 'restoring', file, job: null };
+    const started = await call('startRestore', {
+      body: { uploadId: upload.uploadId, confirmation: RESTORE_CONFIRMATION },
+    });
+    const finished = await followJob(
+      started,
+      (job) => {
+        if (this.isConnected) {
+          this.phase.value = { kind: 'restoring', file, job };
+        }
+      },
+      () => this.isConnected,
+    );
+    if (finished === null) {
+      return;
+    }
+    if (finished.state === 'failed') {
+      if (!this.isConnected) {
+        return;
+      }
+      this.phase.value = { kind: 'refused', reason: finished.error?.detail ?? text('settings.backup.failed') };
+      return;
+    }
+    await session.refresh();
+    navigate(`/who?restored=${encodeURIComponent(upload.manifest.createdAt)}`, { replace: true });
+  }
+
+  private async choose(file: File): Promise<void> {
+    if (!this.isConnected) {
+      return;
+    }
+    this.phase.value = { kind: 'uploading', file: file.name };
+    try {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      const upload = await call('uploadRestore', { body: form });
+      if (!this.isConnected) {
+        return;
+      }
+      this.phase.value = { kind: 'idle' };
+      const sure = await confirmTyped(this, {
+        title: text('settings.backup.confirmTitle'),
+        message: summary(file.name, upload),
+        phrase: RESTORE_CONFIRMATION,
+        confirmLabel: text('settings.backup.confirm'),
       });
-      const finished = await followJob(
-        started,
-        (job) => {
-          phase = { kind: 'restoring', file, job };
-          draw();
-        },
-        () => main.isConnected,
-      );
-      if (finished === null) {
+      if (!sure) {
         return;
       }
-      if (finished.state === 'failed') {
-        phase = { kind: 'refused', reason: finished.error?.detail ?? text('settings.backup.failed') };
-        draw();
+      await this.restore(file.name, upload);
+    } catch (error) {
+      if (error instanceof ApiError && REFUSALS.has(error.code)) {
+        if (this.isConnected) {
+          this.phase.value = { kind: 'refused', reason: problemText(error) };
+        }
         return;
       }
-      await ctx.person.refresh();
-      ctx.navigate(`/who?restored=${encodeURIComponent(upload.manifest.createdAt)}`, { replace: true });
-    };
-
-    const choose = async (file: File): Promise<void> => {
-      phase = { kind: 'uploading', file: file.name };
-      draw();
-      try {
-        const form = new FormData();
-        form.append('file', file, file.name);
-        const upload = await call('uploadRestore', { body: form });
-        phase = { kind: 'idle' };
-        draw();
-        const sure = await confirmTyped({
-          title: text('settings.backup.confirmTitle'),
-          message: summary(file.name, upload),
-          phrase: RESTORE_CONFIRMATION,
-          confirmLabel: text('settings.backup.confirm'),
-        });
-        if (!sure) {
-          return;
-        }
-        await restore(file.name, upload);
-      } catch (error) {
-        if (error instanceof ApiError && REFUSALS.has(error.code)) {
-          phase = { kind: 'refused', reason: problemText(error) };
-        } else {
-          phase = { kind: 'idle' };
-          actionFailed(error, () => void choose(file));
-        }
-        draw();
+      if (this.isConnected) {
+        this.phase.value = { kind: 'idle' };
       }
-    };
+      actionFailed(error, () => void this.choose(file));
+    }
+  }
 
-    const restoreBody = (): TemplateResult => {
-      switch (phase.kind) {
-        case 'uploading':
-          return html`<div class="cl-panel cl-panel-pad">
-            <b>${text('settings.backup.uploading', { file: phase.file })}</b>
-            <lc-progress-bar indeterminate label=${text('settings.backup.uploadingLabel')}></lc-progress-bar>
-          </div>`;
-        case 'restoring':
-          return html`<div class="cl-panel cl-panel-pad">
-            <b>${text('settings.backup.restoring', { file: phase.file })}</b>
-            <lc-progress-bar indeterminate label=${text('settings.backup.restoringLabel')}></lc-progress-bar>
-            <p class="cl-job-count" aria-live="polite">${phase.job?.step ?? ''}</p>
-            <p class="cl-muted">${text('settings.backup.restoringBody')}</p>
-          </div>`;
-        case 'refused':
-          return html`<lc-alert class="cl-settings-banner" variant="error" title=${text('settings.backup.refused')}
-              >${phase.reason}</lc-alert
-            >
-            ${drop()}`;
-        case 'idle':
-          return drop();
-      }
-    };
-
-    const drop = (): TemplateResult => html`<div class="cl-field">
+  private drop(): TemplateResult {
+    return html`<div class="cl-field">
       <span class="cl-field-label" id="backup-drop-label">${text('settings.backup.drop')}</span>
       <lc-file-upload
         variant="dropzone"
@@ -131,35 +130,67 @@ export function screen(ctx: ScreenContext): HTMLElement {
         @change=${(event: Event) => {
           const file = eventFile(event);
           if (file !== null) {
-            void choose(file);
+            void this.choose(file);
           }
         }}
       ></lc-file-upload>
     </div>`;
+  }
 
-    const draw = (): void => {
-      const busy = phase.kind === 'uploading' || phase.kind === 'restoring';
-      render(
-        html`<section class="cl-sgroup" aria-labelledby="settings-backup">
-            <h2 id="settings-backup">${text('settings.backup.title')}</h2>
-            <p>${text('settings.backup.lead')}</p>
-            ${
-              busy
-                ? nothing
-                : html`<a class="cl-download" href=${href(buildPath('downloadBackup'))} download
-                    ><lc-icon name="download" aria-hidden="true"></lc-icon>${text('settings.backup.download')}</a
-                  >`
-            }
-          </section>
-          <section class="cl-sgroup" aria-labelledby="settings-restore">
-            <h2 id="settings-restore">${text('settings.backup.restore')}</h2>
-            <p>${text('settings.backup.restoreLead')}</p>
-            ${restoreBody()}
-          </section>`,
-        main,
-      );
-    };
+  private restoreBody(phase: Phase): TemplateResult {
+    switch (phase.kind) {
+      case 'uploading':
+        return html`<div class="cl-panel cl-panel-pad">
+          <b>${text('settings.backup.uploading', { file: phase.file })}</b>
+          <lc-progress-bar indeterminate label=${text('settings.backup.uploadingLabel')}></lc-progress-bar>
+        </div>`;
+      case 'restoring':
+        return html`<div class="cl-panel cl-panel-pad">
+          <b>${text('settings.backup.restoring', { file: phase.file })}</b>
+          <lc-progress-bar indeterminate label=${text('settings.backup.restoringLabel')}></lc-progress-bar>
+          <p class="cl-job-count" aria-live="polite">${phase.job?.step ?? ''}</p>
+          <p class="cl-muted">${text('settings.backup.restoringBody')}</p>
+        </div>`;
+      case 'refused':
+        return html`<lc-alert class="cl-settings-banner" variant="error" title=${text('settings.backup.refused')}
+            >${phase.reason}</lc-alert
+          >
+          ${this.drop()}`;
+      case 'idle':
+        return this.drop();
+    }
+  }
 
-    draw();
-  });
+  private view(): TemplateResult {
+    const phase = this.phase.value;
+    const busy = phase.kind === 'uploading' || phase.kind === 'restoring';
+    return html`<section class="cl-sgroup" aria-labelledby="settings-backup">
+        <h2 id="settings-backup">${text('settings.backup.title')}</h2>
+        <p>${text('settings.backup.lead')}</p>
+        ${
+          busy
+            ? nothing
+            : html`<a class="cl-download" href=${href(buildPath('downloadBackup'))} download
+                ><lc-icon name="download" aria-hidden="true"></lc-icon>${text('settings.backup.download')}</a
+              >`
+        }
+      </section>
+      <section class="cl-sgroup" aria-labelledby="settings-restore">
+        <h2 id="settings-restore">${text('settings.backup.restore')}</h2>
+        <p>${text('settings.backup.restoreLead')}</p>
+        ${this.restoreBody(phase)}
+      </section>`;
+  }
+
+  render() {
+    return settingsFrame('backup', () => this.view());
+  }
+}
+
+View.register(tag, SettingsBackup);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsBackup;
+  }
 }

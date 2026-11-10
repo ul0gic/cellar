@@ -1,28 +1,41 @@
 import type { FieldError, Wishlist, WishlistItem } from '@cellar/contract';
 import type { LightElements } from '@lightstart/components/elements.js';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type WatchState, watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { navigate } from '../../app/router.ts';
+import '../../design-system/lc/avatar.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/dropdown.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/input.ts';
+import '../../design-system/lc/modal.ts';
+import '../../design-system/lc/select.ts';
+import '../../design-system/lc/textarea.ts';
+import { waiting } from '../../design-system/load-view.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { attempt, fieldError, sheet, waiting } from '../shelf/parts/kit.ts';
+import { attempt, fieldError, sheet } from '../shelf/parts/kit.ts';
 import './wishlists.css';
+
+export const tag = 'cl-screen-wishlists-wishlists';
 
 type Dropdown = LightElements['lc-dropdown'];
 
-const INDENT = ' ';
+const INDENT = ' ';
 
 interface Draft {
-  editing: WishlistItem | null;
-  name: string;
-  ingredientId: string;
-  note: string;
-  url: string;
+  readonly editing: WishlistItem | null;
+  readonly name: string;
+  readonly ingredientId: string;
+  readonly note: string;
+  readonly url: string;
 }
 
 function itemLine(item: WishlistItem): string {
@@ -34,42 +47,77 @@ function itemLine(item: WishlistItem): string {
     : text('wishlists.ingredientNote', { ingredient: item.ingredient.name, note: item.note });
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-kit-screen cl-reading cl-wishlists';
-  const lists = resourceFor('listWishlists', {}, { tags: ['wishlists'] });
-  const tree = resourceFor('getIngredientTree', {}, { tags: ['ingredients'] });
-  let draft: Draft | null = null;
-  let errors: FieldError[] = [];
-  let saving = false;
-  let gotItem: WishlistItem | null = null;
-  let state: WatchState | null = null;
-  const redraw = (): void => {
-    if (state !== null) {
-      draw(state);
+function changed(): void {
+  dataChanged('wishlists', 'stats');
+}
+
+const move = (list: Wishlist, item: WishlistItem, by: -1 | 1): Promise<void> =>
+  attempt(async () => {
+    const ids = list.items.map((entry) => entry.id);
+    const from = ids.indexOf(item.id);
+    const to = from + by;
+    const other = ids[to];
+    if (from < 0 || other === undefined) {
+      return;
     }
-  };
+    ids[to] = item.id;
+    ids[from] = other;
+    await call('reorderWishlist', { body: { ids } });
+    toast({ title: text('wishlists.moved', { name: item.name }) });
+    changed();
+  });
 
-  const changed = (): void => {
-    invalidate('wishlists', 'stats');
-  };
+const remove = (item: WishlistItem): Promise<void> =>
+  attempt(async () => {
+    await call('removeWishlistItem', { params: { id: item.id } });
+    toast({ title: text('wishlists.removed', { name: item.name }) });
+    changed();
+  });
 
-  const openSheet = (item: WishlistItem | null): void => {
-    draft = {
+class WishlistsScreen extends View {
+  readonly lists = apiResource('listWishlists', ['wishlists']);
+  readonly tree = apiResource('getIngredientTree', ['ingredients']);
+  readonly state = loadState([this.lists, this.tree]);
+  readonly draft = signal<Draft | null>(null);
+  readonly errors = signal<readonly FieldError[]>([]);
+  readonly saving = signal(false);
+  readonly gotItem = signal<WishlistItem | null>(null);
+
+  connected(): void {
+    this.classList.add('cl-kit-screen', 'cl-reading', 'cl-wishlists');
+    this.lists.bind(this, {});
+    this.tree.bind(this, {});
+  }
+
+  openSheet(item: WishlistItem | null): void {
+    this.draft.value = {
       editing: item,
       name: item?.name ?? '',
-      ingredientId: item?.ingredient === null || item === null ? '' : String(item.ingredient.id),
+      ingredientId: item === null || item.ingredient === null ? '' : String(item.ingredient.id),
       note: item?.note ?? '',
       url: item?.url ?? '',
     };
-    errors = [];
-    redraw();
-  };
+    this.errors.value = [];
+  }
 
-  async function save(current: Draft): Promise<void> {
-    errors = [];
-    saving = true;
-    redraw();
+  closeSheet(): void {
+    this.draft.value = null;
+  }
+
+  fill(patch: Partial<Draft>): void {
+    const current = this.draft.peek();
+    if (current !== null) {
+      this.draft.value = { ...current, ...patch };
+    }
+  }
+
+  async save(): Promise<void> {
+    const current = this.draft.peek();
+    if (current === null) {
+      return;
+    }
+    this.errors.value = [];
+    this.saving.value = true;
     const body = {
       name: current.name.trim(),
       ingredientId: current.ingredientId === '' ? null : Number(current.ingredientId),
@@ -84,64 +132,40 @@ export function screen(ctx: ScreenContext): HTMLElement {
         await call('updateWishlistItem', { params: { id: current.editing.id }, body });
         toast({ title: text('wishlists.saved') });
       }
-      draft = null;
+      this.draft.value = null;
       changed();
     } catch (error) {
       if (error instanceof ApiError && error.fields.length > 0) {
-        errors = [...error.fields];
+        this.errors.value = [...error.fields];
       } else {
-        actionFailed(error, () => void save(current));
+        actionFailed(error, () => void this.save());
       }
     } finally {
-      saving = false;
-      redraw();
+      this.saving.value = false;
     }
   }
 
-  const move = (list: Wishlist, item: WishlistItem, by: -1 | 1): Promise<void> =>
-    attempt(async () => {
-      const ids = list.items.map((entry) => entry.id);
-      const from = ids.indexOf(item.id);
-      const to = from + by;
-      const other = ids[to];
-      if (from < 0 || other === undefined) {
-        return;
-      }
-      ids[to] = item.id;
-      ids[from] = other;
-      await call('reorderWishlist', { body: { ids } });
-      toast({ title: text('wishlists.moved', { name: item.name }) });
-      changed();
-    });
-
-  const remove = (item: WishlistItem): Promise<void> =>
-    attempt(async () => {
-      await call('removeWishlistItem', { params: { id: item.id } });
-      toast({ title: text('wishlists.removed', { name: item.name }) });
-      changed();
-    });
-
-  const gotIt = (item: WishlistItem, addBottle: boolean): Promise<void> =>
-    attempt(async () => {
-      gotItem = null;
-      redraw();
+  gotIt(item: WishlistItem, addBottle: boolean): Promise<void> {
+    return attempt(async () => {
+      this.gotItem.value = null;
       const result = await call('gotWishlistItem', { params: { id: item.id } });
       changed();
-      if (addBottle) {
-        ctx.navigate('/shelf?add=1', { state: { bottleDraft: result.bottleDraft } });
-      } else {
+      if (!addBottle) {
         toast({ title: text('wishlists.gotDone', { name: item.name }) });
+      } else if (this.isConnected) {
+        navigate('/shelf?add=1', { state: { bottleDraft: result.bottleDraft } });
       }
     });
+  }
 
-  const openMenu = (event: MouseEvent, list: Wishlist, item: WishlistItem): void => {
-    const menu = element.querySelector<Dropdown>('.cl-wishlists-menu');
+  openMenu(event: MouseEvent, list: Wishlist, item: WishlistItem): void {
+    const menu = this.querySelector<Dropdown>('.cl-wishlists-menu');
     if (!(event.currentTarget instanceof Element) || menu === null) {
       return;
     }
     const index = list.items.indexOf(item);
     menu.items = [
-      { label: text('wishlists.edit'), icon: 'pencil', onClick: () => openSheet(item) },
+      { label: text('wishlists.edit'), icon: 'pencil', onClick: () => this.openSheet(item) },
       {
         label: text('wishlists.moveUp'),
         icon: 'arrow-up',
@@ -157,53 +181,54 @@ export function screen(ctx: ScreenContext): HTMLElement {
       { label: text('wishlists.remove'), icon: 'trash-2', danger: true, onClick: () => void remove(item) },
     ];
     menu.toggle(event.currentTarget);
-  };
+  }
 
-  const row = (list: Wishlist, item: WishlistItem): TemplateResult => html`<li class="cl-kit-row">
-    <span class="cl-kit-row-text">
-      <span class="cl-kit-row-name">
-        ${item.name}
-        ${
-          item.url === null
-            ? nothing
-            : html`<a
-                class="cl-wishlists-link"
-                href=${item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label=${text('wishlists.link', { name: item.name })}
-                ><lc-icon name="external-link" aria-hidden="true"></lc-icon
-              ></a>`
-        }
+  row(list: Wishlist, item: WishlistItem): TemplateResult {
+    return html`<li class="cl-kit-row">
+      <span class="cl-kit-row-text">
+        <span class="cl-kit-row-name">
+          ${item.name}
+          ${
+            item.url === null
+              ? nothing
+              : html`<a
+                  class="cl-wishlists-link"
+                  href=${item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label=${text('wishlists.link', { name: item.name })}
+                  ><lc-icon name="external-link" aria-hidden="true"></lc-icon
+                ></a>`
+          }
+        </span>
+        <span class="cl-kit-row-sub">${itemLine(item)}</span>
       </span>
-      <span class="cl-kit-row-sub">${itemLine(item)}</span>
-    </span>
-    ${
-      list.mine
-        ? html`<lc-button
-              variant="ghost"
-              aria-label=${text('wishlists.gotItLabel', { name: item.name })}
-              @click=${() => {
-                gotItem = item;
-                redraw();
-              }}
-            >
-              <lc-icon name="check" aria-hidden="true"></lc-icon>${text('wishlists.gotIt')}
-            </lc-button>
-            <button
-              type="button"
-              class="cl-icon-button"
-              aria-haspopup="menu"
-              aria-label=${text('wishlists.more', { name: item.name })}
-              @click=${(event: MouseEvent) => openMenu(event, list, item)}
-            >
-              <lc-icon name="ellipsis" aria-hidden="true"></lc-icon>
-            </button>`
-        : nothing
-    }
-  </li>`;
+      ${
+        list.mine
+          ? html`<lc-button
+                variant="ghost"
+                aria-label=${text('wishlists.gotItLabel', { name: item.name })}
+                @click=${() => {
+                  this.gotItem.value = item;
+                }}
+              >
+                <lc-icon name="check" aria-hidden="true"></lc-icon>${text('wishlists.gotIt')}
+              </lc-button>
+              <button
+                type="button"
+                class="cl-icon-button"
+                aria-haspopup="menu"
+                aria-label=${text('wishlists.more', { name: item.name })}
+                @click=${(event: MouseEvent) => this.openMenu(event, list, item)}
+              >
+                <lc-icon name="ellipsis" aria-hidden="true"></lc-icon>
+              </button>`
+          : nothing
+      }
+    </li>`;
+  }
 
-  const listView = (list: Wishlist): TemplateResult => {
+  listView(list: Wishlist): TemplateResult {
     const headingId = `cl-wishlist-${list.person.id}`;
     return html`<section class="cl-kit-section" aria-labelledby=${headingId}>
       <div class="cl-kit-section-head">
@@ -213,7 +238,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
         </div>
         ${
           list.mine
-            ? html`<lc-button variant="ghost" aria-label=${text('wishlists.addLabel')} @click=${() => openSheet(null)}>
+            ? html`<lc-button variant="ghost" aria-label=${text('wishlists.addLabel')} @click=${() => this.openSheet(null)}>
                 <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('wishlists.add')}
               </lc-button>`
             : html`<p class="cl-kit-meta">
@@ -230,19 +255,22 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ? html`<p class="cl-kit-panel cl-wishlists-empty">
               ${list.mine ? text('wishlists.emptyOwn') : text('wishlists.emptyOther', { name: list.person.name })}
             </p>`
-          : html`<ul class="cl-kit-list cl-kit-panel">${list.items.map((item) => row(list, item))}</ul>`
+          : html`<ul class="cl-kit-list cl-kit-panel">${list.items.map((item) => this.row(list, item))}</ul>`
       }
     </section>`;
-  };
+  }
 
-  const itemSheet = (): TemplateResult => {
-    const current = draft;
-    const close = (): void => {
-      draft = null;
-      redraw();
-    };
+  itemSheet(): TemplateResult {
+    const current = this.draft.value;
+    const errors = this.errors.value;
     if (current === null) {
-      return sheet({ open: false, title: '', onClose: close, body: html``, footer: html`` });
+      return sheet({
+        open: false,
+        title: '',
+        onClose: () => this.closeSheet(),
+        body: html``,
+        footer: html``,
+      });
     }
     return sheet({
       open: true,
@@ -250,40 +278,34 @@ export function screen(ctx: ScreenContext): HTMLElement {
         current.editing === null
           ? text('wishlists.sheetAdd')
           : text('wishlists.sheetEdit', { name: current.editing.name }),
-      onClose: close,
+      onClose: () => this.closeSheet(),
       body: html`
         <lc-input
           required
           label=${text('wishlists.what')}
           .value=${current.name}
           error-message=${fieldError(errors, 'name')}
-          @input=${(event: Event) => {
-            current.name = eventText(event);
-          }}
+          @input=${(event: Event) => this.fill({ name: eventText(event) })}
         ></lc-input>
         <lc-select
           searchable
           label=${text('wishlists.ingredient')}
           .options=${[
             { value: '', label: text('wishlists.noIngredient') },
-            ...(tree.peek()?.nodes ?? []).map((node) => ({
+            ...(this.tree.value.value?.nodes ?? []).map((node) => ({
               value: String(node.id),
               label: `${INDENT.repeat(node.depth)}${node.name}`,
             })),
           ]}
           .value=${current.ingredientId}
           error-message=${fieldError(errors, 'ingredientId')}
-          @change=${(event: Event) => {
-            current.ingredientId = eventText(event);
-          }}
+          @change=${(event: Event) => this.fill({ ingredientId: eventText(event) })}
         ></lc-select>
         <lc-textarea
           label=${text('wishlists.note')}
           .value=${current.note}
           error-message=${fieldError(errors, 'note')}
-          @input=${(event: Event) => {
-            current.note = eventText(event);
-          }}
+          @input=${(event: Event) => this.fill({ note: eventText(event) })}
         ></lc-textarea>
         <lc-input
           type="url"
@@ -291,62 +313,60 @@ export function screen(ctx: ScreenContext): HTMLElement {
           placeholder="https://"
           .value=${current.url}
           error-message=${fieldError(errors, 'url')}
-          @input=${(event: Event) => {
-            current.url = eventText(event);
-          }}
+          @input=${(event: Event) => this.fill({ url: eventText(event) })}
         ></lc-input>
       `,
       footer: html`
-        <lc-button variant="quiet" @click=${close}>${text('action.cancel')}</lc-button>
-        <lc-button variant="primary" ?disabled=${saving} @click=${() => void save(current)}
+        <lc-button variant="quiet" @click=${() => this.closeSheet()}>${text('action.cancel')}</lc-button>
+        <lc-button variant="primary" ?disabled=${this.saving.value} @click=${() => void this.save()}
           >${current.editing === null ? text('wishlists.addSubmit') : text('wishlists.save')}</lc-button
         >
       `,
     });
-  };
+  }
 
-  const gotDialog = (): TemplateResult => {
-    const item = gotItem;
+  gotDialog(): TemplateResult {
+    const item = this.gotItem.value;
     return html`<lc-modal
       size="sm"
       class="cl-wishlists-got"
       ?open=${item !== null}
       @modal-close=${() => {
-        gotItem = null;
-        redraw();
+        this.gotItem.value = null;
       }}
     >
       <h2 slot="header" class="cl-kit-sheet-title">${item === null ? '' : text('wishlists.gotTitle', { name: item.name })}</h2>
       <p>${text('wishlists.gotBody')}</p>
       <div slot="footer" class="cl-kit-sheet-footer">
-        <lc-button variant="quiet" @click=${() => item !== null && void gotIt(item, false)}
+        <lc-button variant="quiet" @click=${() => item !== null && void this.gotIt(item, false)}
           >${text('wishlists.justRemove')}</lc-button
         >
-        <lc-button variant="primary" @click=${() => item !== null && void gotIt(item, true)}
+        <lc-button variant="primary" @click=${() => item !== null && void this.gotIt(item, true)}
           >${text('wishlists.addBottle')}</lc-button
         >
       </div>
     </lc-modal>`;
-  };
+  }
 
-  const draw = (current: WatchState): void => {
-    state = current;
-    const data = lists.peek();
+  render() {
+    const data = this.lists.value.value;
     const ordered = data === undefined ? [] : [...data.lists].sort((a, b) => Number(b.mine) - Number(a.mine));
-    render(
-      html`
-        <header>
-          <h1 class="cl-kit-title cl-kit-wide-only">${text('wishlists.title')}</h1>
-          <p class="cl-kit-lede">${text('wishlists.lede')}</p>
-        </header>
-        ${data === undefined ? waiting(current, lists, text('nav.wishlists'), 'rows') : ordered.map(listView)}
-        <lc-dropdown class="cl-wishlists-menu"></lc-dropdown>
-        ${itemSheet()} ${gotDialog()}
-      `,
-      element,
-    );
-  };
+    return html`
+      <header>
+        <h1 class="cl-kit-title cl-kit-wide-only">${text('wishlists.title')}</h1>
+        <p class="cl-kit-lede">${text('wishlists.lede')}</p>
+      </header>
+      ${data === undefined ? waiting(this.state, text('nav.wishlists'), 'rows') : ordered.map((list) => this.listView(list))}
+      <lc-dropdown class="cl-wishlists-menu"></lc-dropdown>
+      ${this.itemSheet()} ${this.gotDialog()}
+    `;
+  }
+}
 
-  watch(element, [lists, tree], draw);
-  return element;
+View.register(tag, WishlistsScreen);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: WishlistsScreen;
+  }
 }

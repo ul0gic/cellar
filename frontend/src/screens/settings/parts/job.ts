@@ -1,6 +1,7 @@
 import type { Job } from '@cellar/contract';
 import { html, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../../app/api.ts';
+import '../../../design-system/lc/progress-bar.ts';
 import { formatNumber } from '../../../text/format.ts';
 import { text } from '../../../text/index.ts';
 

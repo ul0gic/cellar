@@ -1,24 +1,37 @@
 import type { IngredientNode, IngredientSummary } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal, untracked } from '@lightstart/light/signals';
 import { call } from '../../app/api.ts';
+import { route } from '../../app/controllers/route.ts';
+import { viewport } from '../../app/controllers/viewport.ts';
 import { eventPage, eventText } from '../../app/events.ts';
-import { type WatchState, type Watched, watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import { href } from '../../app/router.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { href, setQuery } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import type { Owner } from '../../app/types.ts';
 import { illustration } from '../../design-system/illustration.ts';
+import { waiting } from '../../design-system/load-view.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatCount, formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { follow, onWidth, waiting, wide } from '../shelf/parts/kit.ts';
+import '../../design-system/cl-bulb.ts';
+import '../../design-system/cl-figure.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/input.ts';
+import '../../design-system/lc/pagination.ts';
+import '../../design-system/lc/select.ts';
+import { followTyping } from '../shelf/parts/kit.ts';
 import './ingredients.css';
+
+export const tag = 'cl-screen-ingredients-tree';
 
 // D-1 §9.7: the tree shows 100 rows per page.
 const PAGE_SIZE = 100;
-// Typing settles for this long before the list query runs.
-const TYPE_SETTLE_MS = 250;
 
 type Filter = 'on-hand' | 'has-bottles' | 'house-made';
 
@@ -111,44 +124,120 @@ function summaryRow(item: IngredientSummary): Row {
   };
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-kit-screen cl-ingr';
-  const tree = resourceFor('getIngredientTree', {}, { tags: ['ingredients'] });
-  const busy = new Set<number>();
-  let typed = ctx.query.get('q') ?? '';
-  let typeTimer: ReturnType<typeof setTimeout> | null = null;
-  let watched: Watched | null = null;
+class BindScope implements Owner {
+  private teardowns: (() => void)[] = [];
 
-  const pageOf = (): number => idOf(ctx.query.get('page')) ?? 1;
+  $own(teardown: () => void): void {
+    this.teardowns.push(teardown);
+  }
 
-  const listFor = () => {
-    const q = (ctx.query.get('q') ?? '').trim();
-    const filter = filterOf(ctx.query.get('filter'));
-    const root = idOf(ctx.query.get('category'));
-    if (q === '' && filter === null) {
-      return null;
+  end(): void {
+    for (const teardown of this.teardowns.splice(0)) {
+      teardown();
     }
-    return resourceFor(
-      'listIngredients',
-      {
-        query: {
-          ...(q === '' ? {} : { q }),
-          ...(filter === 'on-hand' ? { onHand: 'true' } : {}),
-          ...(filter === 'has-bottles' ? { hasBottles: 'true' } : {}),
-          ...(filter === 'house-made' ? { houseMade: 'true' } : {}),
-          ...(root === null ? {} : { root }),
-          page: pageOf(),
-          pageSize: PAGE_SIZE,
-        },
-      },
-      { tags: ['ingredients'] },
-    );
-  };
+  }
+}
 
-  async function toggle(row: Row): Promise<void> {
-    busy.add(row.id);
-    start();
+function addAction(): HTMLAnchorElement {
+  const icon = document.createElement('lc-icon');
+  icon.setAttribute('name', 'plus');
+  icon.setAttribute('aria-hidden', 'true');
+  const add = document.createElement('a');
+  add.className = 'cl-icon-button';
+  add.href = href('/ingredients/new');
+  add.setAttribute('aria-label', text('ingredients.new'));
+  add.append(icon);
+  return add;
+}
+
+function emptyView(): TemplateResult {
+  const q = (route.query.value.get('q') ?? '').trim();
+  if (q !== '') {
+    return html`<lc-empty-state title=${text('ingredients.noMatchTitle', { q })} description=${text('ingredients.noMatchBody')}>
+        ${illustration('empty-glass')}
+        <lc-button variant="primary" href=${href(`/ingredients/new?name=${encodeURIComponent(q)}`)}
+          >${text('ingredients.create', { q })}</lc-button
+        >
+      </lc-empty-state>`;
+  }
+  return html`<lc-empty-state title=${text('ingredients.noFilterTitle')} description=${text('ingredients.noFilterBody')}>
+      ${illustration('empty-glass')}
+      <lc-button variant="primary" @click=${() => setQuery({ filter: null, category: null, page: null }, 'replace')}
+        >${text('ingredients.clearFilters')}</lc-button
+      >
+    </lc-empty-state>`;
+}
+
+function pager(total: number): TemplateResult | typeof nothing {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  return pages <= 1
+    ? nothing
+    : html`<nav class="cl-ingr-pager" aria-label=${text('ingredients.pages')}>
+        <lc-pagination
+          current=${idOf(route.query.value.get('page')) ?? 1}
+          total=${pages}
+          @change=${(event: Event) => {
+            const page = eventPage(event);
+            setQuery({ page: page !== null && page > 1 ? String(page) : null }, 'push');
+          }}
+        ></lc-pagination>
+      </nav>`;
+}
+
+function filterQuery(patch: Record<string, string | null>): void {
+  setQuery({ ...patch, page: null }, 'replace');
+}
+
+class IngredientTree extends View {
+  readonly tree = apiResource('getIngredientTree', ['ingredients']);
+  readonly list = apiResource('listIngredients', ['ingredients']);
+  readonly treeState = loadState([this.tree]);
+  readonly listState = loadState([this.list]);
+  readonly busy = signal<ReadonlySet<number>>(new Set());
+  readonly typed = signal(route.query.peek().get('q') ?? '');
+
+  connected(): void {
+    this.classList.add('cl-kit-screen', 'cl-ingr');
+    this.tree.bind(this, {});
+    this.bindResults();
+    followTyping(this, this.typed);
+    setAppBar({ actions: [addAction()] });
+  }
+
+  private bindResults(): void {
+    const results = new BindScope();
+    const following = effect(() => {
+      const query = route.query.value;
+      const q = (query.get('q') ?? '').trim();
+      const filter = filterOf(query.get('filter'));
+      const root = idOf(query.get('category'));
+      const page = idOf(query.get('page')) ?? 1;
+      untracked(() => {
+        results.end();
+        if (q === '' && filter === null) {
+          return;
+        }
+        this.list.bind(results, {
+          query: {
+            ...(q === '' ? {} : { q }),
+            ...(filter === 'on-hand' ? { onHand: 'true' } : {}),
+            ...(filter === 'has-bottles' ? { hasBottles: 'true' } : {}),
+            ...(filter === 'house-made' ? { houseMade: 'true' } : {}),
+            ...(root === null ? {} : { root }),
+            page,
+            pageSize: PAGE_SIZE,
+          },
+        });
+      });
+    });
+    this.$own(() => {
+      following.dispose();
+      results.end();
+    });
+  }
+
+  private async toggle(row: Row): Promise<void> {
+    this.busy.value = new Set(this.busy.peek()).add(row.id);
     try {
       const state = await call('setOnHand', { params: { id: row.id }, body: { marked: !row.onHand } });
       if (row.onHand && state.onHand) {
@@ -163,48 +252,37 @@ export function screen(ctx: ScreenContext): HTMLElement {
           toast({ title: text('ingredients.stayParts', { name: row.name }) });
         }
       }
-      invalidate('ingredients', 'recipes', 'stats');
+      dataChanged('ingredients', 'recipes', 'stats');
     } catch (error) {
-      actionFailed(error, () => void toggle(row));
+      actionFailed(error, () => void this.toggle(row));
     } finally {
-      busy.delete(row.id);
-      start();
+      const next = new Set(this.busy.peek());
+      next.delete(row.id);
+      this.busy.value = next;
     }
   }
 
-  const setQuery = (patch: Record<string, string | null>): void => {
-    ctx.query.set({ ...patch, page: null }, 'replace');
-  };
+  private toggleButton(row: Row): TemplateResult {
+    const busy = this.busy.value.has(row.id);
+    return html`<button
+      type="button"
+      class="cl-kit-toggle"
+      aria-pressed=${row.onHand ? 'true' : 'false'}
+      aria-busy=${busy ? 'true' : nothing}
+      @click=${() => {
+        if (!this.busy.peek().has(row.id)) {
+          void this.toggle(row);
+        }
+      }}
+    >
+      <cl-bulb size="mini" status=${row.onHand ? 'on' : 'off'}></cl-bulb>
+      <span class="cl-vh">${text('ingredients.toggleLabel', { name: row.name })}</span>
+      <span>${row.onHand ? text('ingredients.onHand') : text('ingredients.notHere')}</span>
+    </button>`;
+  }
 
-  const onType = (event: Event): void => {
-    typed = eventText(event);
-    if (typeTimer !== null) {
-      clearTimeout(typeTimer);
-    }
-    typeTimer = setTimeout(() => {
-      typeTimer = null;
-      setQuery({ q: typed.trim() === '' ? null : typed });
-    }, TYPE_SETTLE_MS);
-  };
-
-  const toggleButton = (row: Row): TemplateResult => html`<button
-    type="button"
-    class="cl-kit-toggle"
-    aria-pressed=${row.onHand ? 'true' : 'false'}
-    aria-busy=${busy.has(row.id) ? 'true' : nothing}
-    @click=${() => {
-      if (!busy.has(row.id)) {
-        void toggle(row);
-      }
-    }}
-  >
-    <cl-bulb size="mini" status=${row.onHand ? 'on' : 'off'}></cl-bulb>
-    <span class="cl-vh">${text('ingredients.toggleLabel', { name: row.name })}</span>
-    <span>${row.onHand ? text('ingredients.onHand') : text('ingredients.notHere')}</span>
-  </button>`;
-
-  const rowView = (row: Row): TemplateResult =>
-    row.depth === 0
+  private rowView(row: Row): TemplateResult {
+    return row.depth === 0
       ? html`<li class="cl-ingr-row cl-ingr-root">
           <a class="cl-kit-row-link cl-kit-row-text" href=${href(`/ingredients/${row.id}`)}>
             <span class="cl-ingr-root-name">${row.name}</span>
@@ -217,152 +295,109 @@ export function screen(ctx: ScreenContext): HTMLElement {
             <span class="cl-kit-row-name">${row.name}</span>
             ${row.sub === '' ? nothing : html`<span class="cl-kit-row-sub">${row.sub}</span>`}
           </a>
-          ${toggleButton(row)}
+          ${this.toggleButton(row)}
         </li>`;
+  }
 
-  const pager = (total: number): TemplateResult | typeof nothing => {
-    const pages = Math.ceil(total / PAGE_SIZE);
-    return pages <= 1
-      ? nothing
-      : html`<nav class="cl-ingr-pager" aria-label=${text('ingredients.pages')}>
-          <lc-pagination
-            current=${pageOf()}
-            total=${pages}
-            @change=${(event: Event) => {
-              const page = eventPage(event);
-              ctx.query.set({ page: page !== null && page > 1 ? String(page) : null }, 'push');
-            }}
-          ></lc-pagination>
-        </nav>`;
-  };
-
-  const emptyView = (): TemplateResult => {
-    const q = (ctx.query.get('q') ?? '').trim();
-    if (q !== '') {
-      return html`<lc-empty-state title=${text('ingredients.noMatchTitle', { q })} description=${text('ingredients.noMatchBody')}>
-        ${illustration('empty-glass')}
-        <lc-button variant="primary" href=${href(`/ingredients/new?name=${encodeURIComponent(q)}`)}
-          >${text('ingredients.create', { q })}</lc-button
-        >
-      </lc-empty-state>`;
+  private body(
+    nodes: readonly IngredientNode[] | undefined,
+    category: number | null,
+    page: number,
+    searching: boolean,
+  ): TemplateResult | HTMLElement | typeof nothing | null {
+    if (!searching) {
+      const pending = waiting(this.treeState, text('nav.ingredients'), 'rows');
+      if (pending !== null || nodes === undefined) {
+        return pending;
+      }
+      const rows = subtree(nodes, category).map(treeRow);
+      const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      return rows.length === 0
+        ? emptyView()
+        : html`<ul class="cl-kit-list cl-ingr-tree">${shown.map((row) => this.rowView(row))}</ul>
+            ${pager(rows.length)}`;
     }
-    return html`<lc-empty-state title=${text('ingredients.noFilterTitle')} description=${text('ingredients.noFilterBody')}>
-      ${illustration('empty-glass')}
-      <lc-button variant="primary" @click=${() => ctx.query.set({ filter: null, category: null, page: null }, 'replace')}
-        >${text('ingredients.clearFilters')}</lc-button
-      >
-    </lc-empty-state>`;
-  };
+    const pending = waiting(this.listState, text('nav.ingredients'), 'rows');
+    const found = this.list.value.value;
+    if (pending !== null || found === undefined) {
+      return pending;
+    }
+    return found.items.length === 0
+      ? emptyView()
+      : html`<ul class="cl-kit-list cl-ingr-tree">${found.items.map((item) => this.rowView(summaryRow(item)))}</ul>
+          ${pager(found.total)}`;
+  }
 
-  const draw = (state: WatchState): void => {
-    const nodes = tree.peek()?.nodes;
-    const filter = filterOf(ctx.query.get('filter'));
-    const category = idOf(ctx.query.get('category'));
-    const list = listFor();
+  render() {
+    const query = route.query.value;
+    const nodes = this.tree.value.value?.nodes;
+    const filter = filterOf(query.get('filter'));
+    const category = idOf(query.get('category'));
+    const searching = (query.get('q') ?? '').trim() !== '' || filter !== null;
     const roots = nodes?.filter((node) => node.depth === 0) ?? [];
     const counts = chipCounts(nodes ?? []);
     const chip = (value: Filter, label: string, count: number): TemplateResult => html`<button
       type="button"
       class="cl-kit-chip"
       aria-pressed=${filter === value ? 'true' : 'false'}
-      @click=${() => setQuery({ filter: filter === value ? null : value })}
+      @click=${() => filterQuery({ filter: filter === value ? null : value })}
     >
       ${label}<span class="cl-kit-chip-count">${formatNumber(count)}</span>
     </button>`;
-
-    let body: TemplateResult | HTMLElement | typeof nothing | null;
-    if (list === null) {
-      body = waiting(state, tree, text('nav.ingredients'), 'rows');
-      if (body === null && nodes !== undefined) {
-        const rows = subtree(nodes, category).map(treeRow);
-        const shown = rows.slice((pageOf() - 1) * PAGE_SIZE, pageOf() * PAGE_SIZE);
-        body =
-          rows.length === 0
-            ? emptyView()
-            : html`<ul class="cl-kit-list cl-ingr-tree">${shown.map(rowView)}</ul>
-                ${pager(rows.length)}`;
+    return html`
+      ${
+        nodes === undefined
+          ? nothing
+          : html`<cl-figure
+              value=${counts.onHand}
+              label=${text('ingredients.figureLabel', { total: formatNumber(nodes.length) })}
+              sublabel=${text('ingredients.figureSub')}
+            ></cl-figure>`
       }
-    } else {
-      body = waiting(state, list, text('nav.ingredients'), 'rows');
-      const page = list.peek();
-      if (body === null && page !== undefined) {
-        body =
-          page.items.length === 0
-            ? emptyView()
-            : html`<ul class="cl-kit-list cl-ingr-tree">${page.items.map((item) => rowView(summaryRow(item)))}</ul>
-                ${pager(page.total)}`;
-      }
-    }
-
-    render(
-      html`
+      <div class="cl-kit-tools">
+        <lc-input
+          type="search"
+          label=${text('ingredients.find')}
+          placeholder=${text('ingredients.find')}
+          .value=${this.typed.value}
+          @input=${(event: Event) => {
+            this.typed.value = eventText(event);
+          }}
+        ></lc-input>
+        <lc-select
+          label=${text('ingredients.category')}
+          .options=${[
+            { value: '', label: text('ingredients.allCategories') },
+            ...roots.map((root) => ({ value: String(root.id), label: root.name })),
+          ]}
+          .value=${category === null ? '' : String(category)}
+          @change=${(event: Event) => {
+            const value = eventText(event);
+            filterQuery({ category: value === '' ? null : value });
+          }}
+        ></lc-select>
         ${
-          nodes === undefined
-            ? nothing
-            : html`<cl-figure
-                value=${counts.onHand}
-                label=${text('ingredients.figureLabel', { total: formatNumber(nodes.length) })}
-                sublabel=${text('ingredients.figureSub')}
-              ></cl-figure>`
+          viewport.wide.value
+            ? html`<lc-button variant="primary" href=${href('/ingredients/new')}>
+                <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('ingredients.new')}
+              </lc-button>`
+            : nothing
         }
-        <div class="cl-kit-tools">
-          <lc-input
-            type="search"
-            label=${text('ingredients.find')}
-            placeholder=${text('ingredients.find')}
-            .value=${typed}
-            @input=${onType}
-          ></lc-input>
-          <lc-select
-            label=${text('ingredients.category')}
-            .options=${[
-              { value: '', label: text('ingredients.allCategories') },
-              ...roots.map((root) => ({ value: String(root.id), label: root.name })),
-            ]}
-            .value=${category === null ? '' : String(category)}
-            @change=${(event: Event) => {
-              const value = eventText(event);
-              setQuery({ category: value === '' ? null : value });
-            }}
-          ></lc-select>
-          ${
-            wide.matches
-              ? html`<lc-button variant="primary" href=${href('/ingredients/new')}>
-                  <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('ingredients.new')}
-                </lc-button>`
-              : nothing
-          }
-        </div>
-        <div class="cl-kit-chips" role="group" aria-label=${text('ingredients.filtersLabel')}>
-          ${chip('on-hand', text('ingredients.chip.onHand'), counts.onHand)}
-          ${chip('has-bottles', text('ingredients.chip.hasBottles'), counts.hasBottles)}
-          ${chip('house-made', text('ingredients.chip.houseMade'), counts.houseMade)}
-        </div>
-        ${body}
-      `,
-      element,
-    );
-  };
-
-  function start(): void {
-    watched?.stop();
-    const list = listFor();
-    watched = watch(element, list === null ? [tree] : [tree, list], draw);
+      </div>
+      <div class="cl-kit-chips" role="group" aria-label=${text('ingredients.filtersLabel')}>
+        ${chip('on-hand', text('ingredients.chip.onHand'), counts.onHand)}
+        ${chip('has-bottles', text('ingredients.chip.hasBottles'), counts.hasBottles)}
+        ${chip('house-made', text('ingredients.chip.houseMade'), counts.houseMade)}
+      </div>
+      ${this.body(nodes, category, idOf(query.get('page')) ?? 1, searching)}
+    `;
   }
+}
 
-  follow(element, ctx.query.subscribe, () => {
-    if (typeTimer === null) {
-      typed = ctx.query.get('q') ?? '';
-    }
-    start();
-  });
-  start();
-  onWidth(element, () => watched?.redraw());
-  const add = document.createElement('a');
-  add.className = 'cl-icon-button';
-  add.href = href('/ingredients/new');
-  add.setAttribute('aria-label', text('ingredients.new'));
-  render(html`<lc-icon name="plus" aria-hidden="true"></lc-icon>`, add);
-  setAppBar({ actions: [add] });
-  return element;
+View.register(tag, IngredientTree);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: IngredientTree;
+  }
 }

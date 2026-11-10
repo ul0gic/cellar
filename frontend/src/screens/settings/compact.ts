@@ -1,11 +1,18 @@
-import { html, nothing, render } from '@lightstart/light/html';
-import { watch } from '../../app/load.ts';
-import { resourceFor } from '../../app/resources.ts';
+import View from '@lightstart/light';
+import { html, nothing } from '@lightstart/light/html';
+import { session } from '../../app/controllers/session.ts';
+import { apiResource } from '../../app/resources.ts';
 import { SETTINGS_PAGES, type SettingsPage, settingsPath } from '../../app/routes.ts';
 import { MORE_PAGES, signOut } from '../../app/shell.ts';
-import type { ScreenContext, SessionPerson } from '../../app/types.ts';
+import type { SessionPerson } from '../../app/types.ts';
 import { type TextKey, text } from '../../text/index.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/list-row.ts';
+import '../../design-system/lc/tag.ts';
 import './compact.css';
+
+export const tag = 'cl-screen-settings-compact';
 
 const PAGES: readonly { readonly path: string; readonly label: TextKey; readonly icon: string }[] = [
   { path: '/ingredients', label: 'nav.ingredients', icon: 'citrus' },
@@ -20,52 +27,57 @@ const GROUPS: readonly { readonly group: SettingsPage['group']; readonly label: 
   { group: 'install', label: 'settings.group.install' },
 ];
 
-function visible(page: SettingsPage, session: SessionPerson): boolean {
-  return session.person.role === 'owner' || !page.ownerOnly;
+function visible(page: SettingsPage, person: SessionPerson): boolean {
+  return person.person.role === 'owner' || !page.ownerOnly;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-more';
-  const menus = resourceFor('listMenus', { query: { pageSize: 1 } }, { tags: ['menus'] });
+class SettingsCompact extends View {
+  readonly menus = apiResource('listMenus', ['menus']);
 
-  const draw = (): void => {
-    const session = ctx.person.current();
-    if (session === null) {
-      return;
+  connected(): void {
+    this.classList.add('cl-more');
+    this.menus.bind(this, { query: { pageSize: 1 } });
+  }
+
+  render() {
+    const person = session.current.value;
+    if (person === null) {
+      return nothing;
     }
-    const live = menus.peek()?.items.some((menu) => menu.live) ?? false;
-    render(
-      html`
-        <h1 class="cl-more-title">${text('nav.more')}</h1>
-        <nav class="cl-more-list" aria-label=${text('nav.moreMenu')}>
-          ${PAGES.map(
-            (page) => html`<lc-list-row href=${page.path} icon=${page.icon} label=${text(page.label)} chevron>
-              ${page.path === '/menus' && live ? html`<lc-tag slot="trailing">${text('nav.live')}</lc-tag>` : nothing}
-            </lc-list-row>`,
-          )}
-        </nav>
-        <h2 class="cl-more-heading">${text('nav.settings')}</h2>
-        ${GROUPS.map(({ group, label }) => {
-          const pages = SETTINGS_PAGES.filter((page) => page.group === group && visible(page, session));
-          return pages.length === 0
-            ? nothing
-            : html`<section class="cl-more-group" aria-label=${text(label)}>
-                ${pages.map(
-                  (page) =>
-                    html`<lc-list-row href=${settingsPath(page.slug)} label=${text(page.label)} chevron></lc-list-row>`,
-                )}
-              </section>`;
-        })}
-        <lc-button variant="quiet" class="cl-more-signout" @click=${() => void signOut(session)}>
-          <lc-icon name="log-out" aria-hidden="true"></lc-icon>
-          ${session.requireLogin ? text('nav.signOut') : text('nav.switchPerson')}
-        </lc-button>
-      `,
-      element,
-    );
-  };
+    const live = this.menus.value.value?.items.some((menu) => menu.live) ?? false;
+    return html`
+      <h1 class="cl-more-title">${text('nav.more')}</h1>
+      <nav class="cl-more-list" aria-label=${text('nav.moreMenu')}>
+        ${PAGES.map(
+          (page) => html`<lc-list-row href=${page.path} icon=${page.icon} label=${text(page.label)} chevron>
+            ${page.path === '/menus' && live ? html`<lc-tag slot="trailing">${text('nav.live')}</lc-tag>` : nothing}
+          </lc-list-row>`,
+        )}
+      </nav>
+      <h2 class="cl-more-heading">${text('nav.settings')}</h2>
+      ${GROUPS.map(({ group, label }) => {
+        const pages = SETTINGS_PAGES.filter((page) => page.group === group && visible(page, person));
+        return pages.length === 0
+          ? nothing
+          : html`<section class="cl-more-group" aria-label=${text(label)}>
+              ${pages.map(
+                (page) =>
+                  html`<lc-list-row href=${settingsPath(page.slug)} label=${text(page.label)} chevron></lc-list-row>`,
+              )}
+            </section>`;
+      })}
+      <lc-button variant="quiet" class="cl-more-signout" @click=${() => void signOut(person)}>
+        <lc-icon name="log-out" aria-hidden="true"></lc-icon>
+        ${person.requireLogin ? text('nav.signOut') : text('nav.switchPerson')}
+      </lc-button>
+    `;
+  }
+}
 
-  watch(element, [menus], draw);
-  return element;
+View.register(tag, SettingsCompact);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SettingsCompact;
+  }
 }

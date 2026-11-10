@@ -10,11 +10,19 @@ import {
 import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
 import type { SearchDoc } from '@lightstart/components/types.js';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { call } from '../../../app/api.ts';
 import { eventChecked, eventText } from '../../../app/events.ts';
 import { actionFailed } from '../../../app/problems.ts';
-import { invalidate } from '../../../app/resources.ts';
+import { dataChanged } from '../../../app/resources.ts';
+import type { OverlayHost } from '../../../app/types.ts';
 import { text } from '../../../text/index.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/checkbox.ts';
+import '../../../design-system/lc/input.ts';
+import '../../../design-system/lc/search.ts';
+import '../../../design-system/lc/select.ts';
+import '../../../design-system/lc/tag.ts';
 import { openSheet } from './sheet.ts';
 
 export interface PickedIngredient {
@@ -85,21 +93,28 @@ export function toUnit(raw: string): UnitId | InputVolumeUnit | null {
   return UNIT_CHOICES.find((unit) => unit === raw) ?? null;
 }
 
-async function openCreateSheet(name: string, heading: string, picked: (ingredient: PickedIngredient) => void) {
+async function openCreateSheet(
+  host: OverlayHost,
+  name: string,
+  heading: string,
+  picked: (ingredient: PickedIngredient) => void,
+): Promise<void> {
   const { nodes } = await call('getIngredientTree', {});
-  let newName = name;
-  let parent = '';
-  let strength = '';
-  let saving = false;
+  if (!host.isConnected) {
+    return;
+  }
+  const newName = signal(name);
+  const parent = signal('');
+  const strength = signal('');
+  const saving = signal(false);
   const save = async (): Promise<void> => {
-    saving = true;
-    sheet.redraw();
+    saving.value = true;
     try {
       const created = await call('createIngredient', {
         body: {
-          name: newName.trim(),
-          parentId: parent === '' ? null : Number(parent),
-          strength: strength === '' ? 0 : Number(strength),
+          name: newName.peek().trim(),
+          parentId: parent.peek() === '' ? null : Number(parent.peek()),
+          strength: strength.peek() === '' ? 0 : Number(strength.peek()),
           description: '',
           origin: '',
           color: null,
@@ -108,40 +123,44 @@ async function openCreateSheet(name: string, heading: string, picked: (ingredien
           parts: [],
         },
       });
-      invalidate('ingredients');
+      dataChanged('ingredients');
       sheet.close();
-      picked({ id: created.id, name: created.name });
+      if (host.isConnected) {
+        picked({ id: created.id, name: created.name });
+      }
     } catch (error) {
-      saving = false;
-      sheet.redraw();
+      saving.value = false;
       actionFailed(error, () => void save());
     }
   };
-  const parentName = nodes.find((node) => String(node.id) === parent)?.name ?? '';
-  const sheet = openSheet({
+  const sheet = openSheet(host, {
     heading: () => heading,
     body: () => html`
       <lc-input
         label=${text('recipes.createName')}
         maxlength=${LIMITS.name.max}
-        value=${newName}
+        value=${newName.value}
         @input=${(event: Event) => {
-          newName = eventText(event);
-          sheet.redraw();
+          newName.value = eventText(event);
         }}
       ></lc-input>
       <lc-select
         label=${text('recipes.createParent')}
         searchable
-        value=${parent}
+        value=${parent.value}
         .options=${nodes.map((node) => ({ value: String(node.id), label: `${'· '.repeat(node.depth)}${node.name}` }))}
         @change=${(event: Event) => {
-          parent = eventText(event);
-          sheet.redraw();
+          parent.value = eventText(event);
         }}
       ></lc-select>
       <p class="cl-sheet-hint">
-        ${parent === '' ? text('recipes.createParentHint') : text('recipes.createParentUses', { parent: parentName })}
+        ${
+          parent.value === ''
+            ? text('recipes.createParentHint')
+            : text('recipes.createParentUses', {
+                parent: nodes.find((node) => String(node.id) === parent.value)?.name ?? '',
+              })
+        }
       </p>
       <lc-input
         label=${text('recipes.createStrength')}
@@ -149,19 +168,23 @@ async function openCreateSheet(name: string, heading: string, picked: (ingredien
         min="0"
         max="100"
         step="0.1"
-        value=${strength}
+        value=${strength.value}
         @input=${(event: Event) => {
-          strength = eventText(event);
+          strength.value = eventText(event);
         }}
       ></lc-input>
     `,
     footer: () => html`
       <lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.back')}</lc-button>
-      <lc-button variant="primary" ?disabled=${saving || newName.trim() === ''} @click=${() => void save()}
+      <lc-button variant="primary" ?disabled=${saving.value || newName.value.trim() === ''} @click=${() => void save()}
         >${text('recipes.createAndUse')}</lc-button
       >
     `,
   });
+}
+
+function isOverlayHost(value: unknown): value is OverlayHost {
+  return value instanceof HTMLElement && '$own' in value && typeof value.$own === 'function';
 }
 
 function ingredientPick(
@@ -203,8 +226,11 @@ function ingredientPick(
       return;
     }
     if (doc.id === CREATE_ID) {
+      const host = event.currentTarget;
       const name = 'query' in doc && typeof doc.query === 'string' ? doc.query : '';
-      void openCreateSheet(name, heading, onChange);
+      if (isOverlayHost(host)) {
+        void openCreateSheet(host, name, heading, onChange);
+      }
       return;
     }
     if (typeof doc.id === 'number' && 'title' in doc && typeof doc.title === 'string') {
@@ -306,25 +332,18 @@ function lineRow(position: number, line: LineDraft, onChange: (next: LineDraft) 
   </div>`;
 }
 
-let registered = false;
+registerFormFieldRenderer('ingredient-pick', (field, value, onChange) =>
+  ingredientPick(
+    field.label ?? '',
+    field.label ?? '',
+    isPicked(value) ? value : null,
+    onChange,
+    typeof field.errorMessage === 'string' ? field.errorMessage : '',
+  ),
+);
 
-export function registerLineFields(): void {
-  if (registered) {
-    return;
-  }
-  registered = true;
-  registerFormFieldRenderer('ingredient-pick', (field, value, onChange) =>
-    ingredientPick(
-      field.label ?? '',
-      field.label ?? '',
-      isPicked(value) ? value : null,
-      onChange,
-      typeof field.errorMessage === 'string' ? field.errorMessage : '',
-    ),
-  );
-  registerFormFieldRenderer('recipe-line', (field, value, onChange) => {
-    const index = /\[(\d+)\]$/.exec(field.name)?.[1];
-    const position = index === undefined ? 1 : Number(index) + 1;
-    return lineRow(position, isLineDraft(value) ? value : BLANK_LINE, onChange);
-  });
-}
+registerFormFieldRenderer('recipe-line', (field, value, onChange) => {
+  const index = /\[(\d+)\]$/.exec(field.name)?.[1];
+  const position = index === undefined ? 1 : Number(index) + 1;
+  return lineRow(position, isLineDraft(value) ? value : BLANK_LINE, onChange);
+});

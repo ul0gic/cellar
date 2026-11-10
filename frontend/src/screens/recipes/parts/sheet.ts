@@ -1,4 +1,8 @@
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import type { OverlayHost } from '../../../app/types.ts';
+import { hostOverlay } from '../../../design-system/overlay.ts';
+import '../../../design-system/lc/modal.ts';
 import './sheet.css';
 
 export interface SheetOptions {
@@ -10,39 +14,50 @@ export interface SheetOptions {
 }
 
 export interface Sheet {
-  readonly redraw: () => void;
   readonly close: () => void;
 }
 
-export function openSheet(opts: SheetOptions): Sheet {
-  const host = document.createElement('div');
-  let open = true;
-  const draw = (): void => {
-    render(
-      html`<lc-modal
-        class="cl-sheet"
-        variant=${opts.centered === true ? 'default' : 'sheet'}
-        size=${opts.centered === true ? 'lg' : 'md'}
-        ?open=${open}
-        @modal-close=${() => {
-          host.remove();
-          opts.onClose?.();
-        }}
-      >
-        <h2 slot="header" class="cl-sheet-title">${opts.heading()}</h2>
-        <div class="cl-sheet-body">${opts.body()}</div>
-        ${opts.footer === undefined ? nothing : html`<div slot="footer" class="cl-sheet-footer">${opts.footer()}</div>`}
-      </lc-modal>`,
-      host,
-    );
-  };
-  document.body.append(host);
-  draw();
-  return {
-    redraw: draw,
-    close: () => {
-      open = false;
-      draw();
+const tag = 'cl-recipes-sheet';
+
+class RecipesSheet extends View {
+  options: SheetOptions | null = null;
+
+  render() {
+    const { options } = this;
+    if (options === null) {
+      return nothing;
+    }
+    return html`<lc-modal
+      class="cl-sheet"
+      variant=${options.centered === true ? 'default' : 'sheet'}
+      size=${options.centered === true ? 'lg' : 'md'}
+      open
+      @modal-close=${() => options.onClose?.()}
+    >
+      <h2 slot="header" class="cl-sheet-title">${options.heading()}</h2>
+      <div class="cl-sheet-body">${options.body()}</div>
+      ${options.footer === undefined ? nothing : html`<div slot="footer" class="cl-sheet-footer">${options.footer()}</div>`}
+    </lc-modal>`;
+  }
+}
+
+View.register(tag, RecipesSheet);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: RecipesSheet;
+  }
+}
+
+export function openSheet(host: OverlayHost, opts: SheetOptions): Sheet {
+  const sheet = document.createElement(tag);
+  sheet.options = {
+    ...opts,
+    onClose: () => {
+      end();
+      opts.onClose?.();
     },
   };
+  const end = hostOverlay(host, sheet);
+  return { close: end };
 }

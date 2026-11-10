@@ -1,11 +1,19 @@
 import { type ImageRef, LIMITS, type Recipe } from '@cellar/contract';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../../app/api.ts';
 import { actionFailed } from '../../../app/problems.ts';
-import { invalidate } from '../../../app/resources.ts';
+import { dataChanged } from '../../../app/resources.ts';
+import type { OverlayHost } from '../../../app/types.ts';
+import { hostOverlay } from '../../../design-system/overlay.ts';
 import { thumbHashDataUrl } from '../../../design-system/thumbhash.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
+import '../../../design-system/lc/alert.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/icon.ts';
+import '../../../design-system/lc/image.ts';
+import '../../../design-system/lc/progress-bar.ts';
 import { recipeInputOf } from './recipe-input.ts';
 import { openSheet } from './sheet.ts';
 
@@ -42,59 +50,56 @@ function aiNote(): TemplateResult {
   </p>`;
 }
 
-export function openHistorySheet(recipe: Recipe): void {
-  let step: Step<string> = { kind: 'working' };
-  let saving = false;
+export function openHistorySheet(host: OverlayHost, recipe: Recipe): void {
+  const step = signal<Step<string>>({ kind: 'working' });
+  const saving = signal(false);
 
   const run = async (): Promise<void> => {
-    step = { kind: 'working' };
-    sheet.redraw();
+    step.value = { kind: 'working' };
     try {
       const history = await call('aiDrinkHistory', { body: { recipeId: recipe.id } });
-      step = { kind: 'done', value: history.text };
+      step.value = { kind: 'done', value: history.text };
     } catch (error) {
-      step = { kind: 'failed', message: failure(error) };
+      step.value = { kind: 'failed', message: failure(error) };
     }
-    sheet.redraw();
   };
 
   const keep = async (addition: string): Promise<void> => {
-    saving = true;
-    sheet.redraw();
+    saving.value = true;
     const input = recipeInputOf(recipe);
     const description = input.description.trim() === '' ? addition : `${input.description}\n\n${addition}`;
     try {
       await call('replaceRecipe', { params: { id: recipe.id }, body: { ...input, description } });
-      invalidate('recipes');
+      dataChanged('recipes');
       sheet.close();
       toast({ title: text('recipes.historyAdded') });
     } catch (error) {
-      saving = false;
-      step = { kind: 'failed', message: failure(error) };
-      sheet.redraw();
+      saving.value = false;
+      step.value = { kind: 'failed', message: failure(error) };
     }
   };
 
-  const sheet = openSheet({
+  const sheet = openSheet(host, {
     centered: true,
     heading: () => text('recipes.historyHeading', { name: recipe.name }),
     body: () => {
-      switch (step.kind) {
+      const current = step.value;
+      switch (current.kind) {
         case 'working':
           return html`<lc-progress-bar indeterminate label=${text('recipes.historyWorking')}></lc-progress-bar>
             <p class="cl-sheet-hint" aria-live="polite">${text('recipes.historyWorking')}</p>`;
         case 'failed':
-          return failedBanner(step.message, () => void run());
+          return failedBanner(current.message, () => void run());
         case 'done':
-          return html`<p class="cl-ai-text">${step.value}</p>
+          return html`<p class="cl-ai-text">${current.value}</p>
             ${aiNote()}`;
       }
     },
     footer: () => {
-      const current = step;
+      const current = step.value;
       return current.kind === 'done'
         ? html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('recipes.discard')}</lc-button>
-            <lc-button variant="primary" ?disabled=${saving} @click=${() => void keep(current.value)}
+            <lc-button variant="primary" ?disabled=${saving.value} @click=${() => void keep(current.value)}
               >${text('recipes.addToDescription')}</lc-button
             >`
         : html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.close')}</lc-button>`;
@@ -103,76 +108,83 @@ export function openHistorySheet(recipe: Recipe): void {
   void run();
 }
 
-export function openPhotoSheet(recipe: Recipe): void {
-  let step: Step<ImageRef> = { kind: 'working' };
-  let kept = false;
+export function openPhotoSheet(host: OverlayHost, recipe: Recipe): void {
+  const step = signal<Step<ImageRef>>({ kind: 'working' });
+  const kept = signal(false);
 
   const run = async (): Promise<void> => {
-    step = { kind: 'working' };
-    sheet.redraw();
+    step.value = { kind: 'working' };
     try {
       const image = await call('aiGenerateImage', { body: { target: { type: 'recipe', id: recipe.id }, prompt: '' } });
-      step = { kind: 'done', value: image };
+      step.value = { kind: 'done', value: image };
     } catch (error) {
-      step = { kind: 'failed', message: failure(error) };
+      step.value = { kind: 'failed', message: failure(error) };
     }
-    sheet.redraw();
   };
 
   const use = async (image: ImageRef): Promise<void> => {
     const input = recipeInputOf(recipe);
+    kept.value = true;
     try {
       await call('replaceRecipe', {
         params: { id: recipe.id },
         body: { ...input, imageIds: [image.id, ...input.imageIds].slice(0, LIMITS.recipeImages.max) },
       });
-      kept = true;
-      invalidate('recipes');
+      dataChanged('recipes');
       sheet.close();
+      endDiscard();
       toast({ title: text('recipes.photoAdded') });
     } catch (error) {
-      step = { kind: 'failed', message: failure(error) };
-      sheet.redraw();
+      kept.value = false;
+      step.value = { kind: 'failed', message: failure(error) };
     }
   };
 
   const discard = async (): Promise<void> => {
-    if (step.kind === 'done' && !kept) {
-      const id = step.value.id;
+    const current = step.peek();
+    if (current.kind === 'done' && !kept.peek()) {
+      const id = current.value.id;
       await call('deleteImage', { params: { id } }).catch((error: unknown) =>
         actionFailed(error, () => void call('deleteImage', { params: { id } })),
       );
     }
   };
 
-  const sheet = openSheet({
+  const discardNow = (): void => {
+    sheet.close();
+    endDiscard();
+  };
+
+  const endDiscard = hostOverlay(host, document.createElement('span'), () => void discard());
+  const sheet = openSheet(host, {
     centered: true,
     heading: () => text('recipes.photoHeading', { name: recipe.name }),
     body: () => {
-      switch (step.kind) {
+      const current = step.value;
+      switch (current.kind) {
         case 'working':
           return html`<lc-progress-bar indeterminate label=${text('recipes.photoWorking')}></lc-progress-bar>
             <p class="cl-sheet-hint" aria-live="polite">${text('recipes.photoWorking')}</p>`;
         case 'failed':
-          return failedBanner(step.message, () => void run());
+          return failedBanner(current.message, () => void run());
         case 'done':
           return html`<lc-image
               class="cl-ai-photo"
-              src=${step.value.url}
+              src=${current.value.url}
               alt=${text('photo.of', { name: recipe.name })}
-              placeholder=${step.value.thumbhash === null ? nothing : thumbHashDataUrl(step.value.thumbhash)}
+              placeholder=${current.value.thumbhash === null ? nothing : thumbHashDataUrl(current.value.thumbhash)}
             ></lc-image>
             ${aiNote()}`;
       }
     },
     footer: () => {
-      const current = step;
+      const current = step.value;
       return current.kind === 'done'
-        ? html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('recipes.discard')}</lc-button>
+        ? html`<lc-button variant="quiet" @click=${discardNow}>${text('recipes.discard')}</lc-button>
             <lc-button variant="primary" @click=${() => void use(current.value)}>${text('crop.use')}</lc-button>`
-        : html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.close')}</lc-button>`;
+        : html`<lc-button variant="quiet" @click=${discardNow}>${text('action.close')}</lc-button>`;
     },
-    onClose: () => void discard(),
+    onClose: () => endDiscard(),
   });
   void run();
 }

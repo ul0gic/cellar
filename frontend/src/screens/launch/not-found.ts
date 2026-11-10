@@ -1,7 +1,7 @@
 import View from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import { href } from '../../app/router.ts';
-import type { RouteParams, ScreenContext } from '../../app/types.ts';
+import type { RouteParams } from '../../app/types.ts';
 import '../../design-system/lc/button.ts';
 import '../../design-system/lc/empty-state.ts';
 import { illustration } from '../../design-system/illustration.ts';
@@ -32,8 +32,4 @@ declare global {
   interface HTMLElementTagNameMap {
     [tag]: LaunchNotFound;
   }
-}
-
-export function screen(ctx: ScreenContext): HTMLElement {
-  return Object.assign(document.createElement(tag), { params: ctx.params });
 }

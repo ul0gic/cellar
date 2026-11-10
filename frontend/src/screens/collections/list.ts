@@ -1,127 +1,129 @@
-import { LIMITS } from '@cellar/contract';
-import { html, nothing, render } from '@lightstart/light/html';
+import { type CollectionSummary, LIMITS } from '@cellar/contract';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type WatchState, watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import { href } from '../../app/router.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { href, navigate } from '../../app/router.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
 import { illustration } from '../../design-system/illustration.ts';
-import { skeleton } from '../../design-system/skeleton.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/image.ts';
+import '../../design-system/lc/input.ts';
+import { waiting } from '../../design-system/load-view.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { text } from '../../text/index.ts';
-import { openSheet } from '../recipes/parts/sheet.ts';
+import { openSheet, type Sheet } from '../recipes/parts/sheet.ts';
 import './collections.css';
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-collections';
-  const list = resourceFor('listCollections', {}, { tags: ['collections'] });
-  let loadState: WatchState | null = null;
+export const tag = 'cl-screen-collections-list';
 
-  const create = (): void => {
-    let name = '';
-    let saving = false;
-    const save = async (): Promise<void> => {
-      saving = true;
-      sheet.redraw();
-      try {
-        const created = await call('createCollection', { body: { name: name.trim(), description: '' } });
-        invalidate('collections');
-        sheet.close();
-        ctx.navigate(`/collections/${created.id}`);
-      } catch (error) {
-        saving = false;
-        sheet.redraw();
-        actionFailed(error, () => void save());
+class CollectionsList extends View {
+  readonly list = apiResource('listCollections', ['collections']);
+  readonly state = loadState([this.list]);
+  readonly name = signal('');
+  readonly saving = signal(false);
+
+  connected(): void {
+    this.classList.add('cl-collections');
+    this.list.bind(this, {});
+  }
+
+  async save(sheet: Sheet): Promise<void> {
+    this.saving.value = true;
+    try {
+      const created = await call('createCollection', { body: { name: this.name.peek().trim(), description: '' } });
+      dataChanged('collections');
+      sheet.close();
+      if (this.isConnected) {
+        navigate(`/collections/${created.id}`);
       }
-    };
-    const sheet = openSheet({
+    } catch (error) {
+      this.saving.value = false;
+      actionFailed(error, () => void this.save(sheet));
+    }
+  }
+
+  create(): void {
+    this.name.value = '';
+    this.saving.value = false;
+    const sheet = openSheet(this, {
       heading: () => text('collections.newHeading'),
       body: () => html`<lc-input
         label=${text('collections.name')}
         maxlength=${LIMITS.shortName.max}
-        value=${name}
+        value=${this.name.value}
         @input=${(event: Event) => {
-          name = eventText(event);
-          sheet.redraw();
+          this.name.value = eventText(event);
         }}
       ></lc-input>`,
       footer: () => html`
         <lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
-        <lc-button variant="primary" ?disabled=${saving || name.trim() === ''} @click=${() => void save()}
+        <lc-button variant="primary" ?disabled=${this.saving.value || this.name.value.trim() === ''} @click=${() => void this.save(sheet)}
           >${text('collections.create')}</lc-button
         >
       `,
     });
-  };
+  }
 
-  const draw = (): void => {
-    const data = list.peek();
-    const problem = loadState?.error(list) ?? null;
+  card(collection: CollectionSummary): TemplateResult {
+    return html`<li>
+      <a class="cl-collection-card" href=${href(`/collections/${collection.id}`)}>
+        <span class="cl-collection-media">
+          ${
+            collection.cover === null
+              ? html`<cl-plate kind=${plateForGlass(null)} name=${collection.name}></cl-plate>`
+              : html`<lc-image
+                  src=${collection.cover.url}
+                  alt=""
+                  placeholder=${collection.cover.thumbhash === null ? nothing : thumbHashDataUrl(collection.cover.thumbhash)}
+                ></lc-image>`
+          }
+        </span>
+        <span class="cl-collection-name">${collection.name}</span>
+        <span class="cl-collection-meta">
+          ${text(collection.recipeCount === 1 ? 'collections.countOne' : 'collections.count', { count: collection.recipeCount })}
+          ${collection.createdBy === null ? '' : text('collections.by', { name: collection.createdBy.name })}
+        </span>
+      </a>
+    </li>`;
+  }
+
+  render() {
+    const data = this.list.value.value;
     const head = html`<header class="cl-collections-head">
       <h1 class="cl-collections-title">${text('nav.collections')}</h1>
-      <lc-button variant="primary" @click=${create}>
+      <lc-button variant="primary" @click=${() => this.create()}>
         <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('collections.new')}
       </lc-button>
     </header>`;
     if (data === undefined) {
-      if (problem !== null) {
-        render(
-          html`${head}<lc-empty-state title=${text('loadFailed.title', { screen: text('nav.collections') })} description=${text('loadFailed.body')}>
-            ${illustration('empty-lost')}
-            <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
-          </lc-empty-state>`,
-          element,
-        );
-      } else if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
-        element.replaceChildren(skeleton('cards', text('nav.collections')));
-      }
-      return;
+      const view = waiting(this.state, text('nav.collections'), 'cards');
+      return this.state.phase.value === 'failed' ? html`${head}${view}` : view;
     }
-    element.querySelector('.cl-skeleton')?.remove();
-    render(
-      html`${head}
-        ${
-          data.collections.length === 0
-            ? html`<lc-empty-state title=${text('collections.emptyTitle')} description=${text('collections.emptyBody')}>
-                ${illustration('empty-glass')}
-                <lc-button variant="primary" @click=${create}>${text('collections.new')}</lc-button>
-              </lc-empty-state>`
-            : html`<ul class="cl-collections-grid">
-                ${data.collections.map(
-                  (collection) => html`<li>
-                    <a class="cl-collection-card" href=${href(`/collections/${collection.id}`)}>
-                      <span class="cl-collection-media">
-                        ${
-                          collection.cover === null
-                            ? html`<cl-plate kind=${plateForGlass(null)} name=${collection.name}></cl-plate>`
-                            : html`<lc-image
-                                src=${collection.cover.url}
-                                alt=""
-                                placeholder=${collection.cover.thumbhash === null ? nothing : thumbHashDataUrl(collection.cover.thumbhash)}
-                              ></lc-image>`
-                        }
-                      </span>
-                      <span class="cl-collection-name">${collection.name}</span>
-                      <span class="cl-collection-meta">
-                        ${text(collection.recipeCount === 1 ? 'collections.countOne' : 'collections.count', { count: collection.recipeCount })}
-                        ${collection.createdBy === null ? '' : text('collections.by', { name: collection.createdBy.name })}
-                      </span>
-                    </a>
-                  </li>`,
-                )}
-              </ul>`
-        }`,
-      element,
-    );
-  };
+    return html`${head}
+      ${
+        data.collections.length === 0
+          ? html`<lc-empty-state title=${text('collections.emptyTitle')} description=${text('collections.emptyBody')}>
+              ${illustration('empty-glass')}
+              <lc-button variant="primary" @click=${() => this.create()}>${text('collections.new')}</lc-button>
+            </lc-empty-state>`
+          : html`<ul class="cl-collections-grid">
+              ${data.collections.map((collection) => this.card(collection))}
+            </ul>`
+      }`;
+  }
+}
 
-  watch(element, [list], (state) => {
-    loadState = state;
-    draw();
-  });
-  return element;
+View.register(tag, CollectionsList);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: CollectionsList;
+  }
 }

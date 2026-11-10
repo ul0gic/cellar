@@ -1,14 +1,18 @@
 import type { BottleSummary, BuyNextItem, Home, Job, RecipeSummary, ShoppingListItem } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { call } from '../../app/api.ts';
+import { session } from '../../app/controllers/session.ts';
 import { eventChecked } from '../../app/events.ts';
-import { watch } from '../../app/load.ts';
+import { loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
-import type { ScreenContext, SessionPerson } from '../../app/types.ts';
+import type { SessionPerson } from '../../app/types.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
+import { loadFailed } from '../../design-system/load-view.ts';
 import { takeFirstArrival } from '../../design-system/motion.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { thumbHashDataUrl, thumbHashLuma } from '../../design-system/thumbhash.ts';
@@ -16,8 +20,17 @@ import { toast } from '../../design-system/toast.ts';
 import { formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
 import { followJob, jobProgress } from '../settings/parts/job.ts';
-import { loadFailed } from '../settings/parts/load-failed.ts';
+import '../../design-system/cl-figure.ts';
+import '../../design-system/cl-live-card.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/checkbox.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/image.ts';
+import '../../design-system/lc/scroller.ts';
 import './home.css';
+
+export const tag = 'cl-screen-home';
 
 const COLLAGE_SIZE = 3;
 const HERO_POOL = 24;
@@ -88,100 +101,114 @@ function bottleTile(bottle: BottleSummary): TemplateResult {
   </a>`;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-home';
-  const arrival = takeFirstArrival();
-  if (arrival) {
-    element.classList.add('cl-arrive');
-  }
-  const home = resourceFor('getHome', {}, { tags: ['shelf', 'recipes', 'shopping', 'menus', 'wishlists'] });
-  const top = resourceFor(
-    'listRecipes',
-    { query: { status: 'can_make', sort: 'rating', order: 'desc', pageSize: HERO_POOL } },
-    { tags: ['recipes', 'shelf'] },
-  );
-  const anyRecipes = resourceFor(
-    'listRecipes',
-    { query: { sort: 'rating', order: 'desc', pageSize: HERO_POOL } },
-    { tags: ['recipes'] },
-  );
-  const bottles = resourceFor(
-    'listBottles',
-    { query: { status: ['sealed', 'open'], sort: 'added', order: 'desc', pageSize: SHELF_STRIP_SIZE } },
-    { tags: ['shelf'] },
-  );
-  const shopping = resourceFor('getShoppingList', {}, { tags: ['shopping'] });
-  const owner = ctx.person.current()?.person.role === 'owner';
-  const notifications = owner ? resourceFor('listNotifications', {}, { tags: ['settings'] }) : null;
-  const added = new Set<number>();
-  let catalogJob: Job | null = null;
+class HomeScreen extends View {
+  readonly arrival = takeFirstArrival();
+  readonly owner = session.current.peek()?.person.role === 'owner';
+  readonly home = apiResource('getHome', ['shelf', 'recipes', 'shopping', 'menus', 'wishlists']);
+  readonly top = apiResource('listRecipes', ['recipes', 'shelf']);
+  readonly anyRecipes = apiResource('listRecipes', ['recipes']);
+  readonly bottles = apiResource('listBottles', ['shelf']);
+  readonly shopping = apiResource('getShoppingList', ['shopping']);
+  readonly notifications = apiResource('listNotifications', ['settings']);
+  readonly state = loadState([
+    this.home,
+    this.top,
+    this.anyRecipes,
+    this.bottles,
+    this.shopping,
+    ...(this.owner ? [this.notifications] : []),
+  ]);
+  readonly added = signal<ReadonlySet<number>>(new Set());
+  readonly catalogJob = signal<Job | null>(null);
 
-  const addToList = async (item: BuyNextItem): Promise<void> => {
+  connected(): void {
+    this.classList.add('cl-home');
+    if (this.arrival) {
+      this.classList.add('cl-arrive');
+    }
+    setAppBar({ hidden: true });
+    this.home.bind(this, {});
+    this.top.bind(this, { query: { status: 'can_make', sort: 'rating', order: 'desc', pageSize: HERO_POOL } });
+    this.anyRecipes.bind(this, { query: { sort: 'rating', order: 'desc', pageSize: HERO_POOL } });
+    this.bottles.bind(this, {
+      query: { status: ['sealed', 'open'], sort: 'added', order: 'desc', pageSize: SHELF_STRIP_SIZE },
+    });
+    this.shopping.bind(this, {});
+    if (this.owner) {
+      this.notifications.bind(this, {});
+    }
+  }
+
+  private async addToList(item: BuyNextItem): Promise<void> {
     try {
       await call('addToShoppingList', { body: { items: [{ ingredientId: item.ingredient.id }] } });
-      added.add(item.ingredient.id);
-      invalidate('shopping');
-      redraw();
+      dataChanged('shopping');
+      if (this.isConnected) {
+        this.added.value = new Set(this.added.peek()).add(item.ingredient.id);
+      }
     } catch (error) {
-      actionFailed(error, () => void addToList(item));
+      actionFailed(error, () => void this.addToList(item));
     }
-  };
+  }
 
-  const checkOff = async (item: ShoppingListItem): Promise<void> => {
+  private async checkOff(item: ShoppingListItem): Promise<void> {
     try {
       await call('checkOffShoppingItem', { params: { id: item.id } });
-      invalidate('shopping');
+      dataChanged('shopping');
       toast({
         title: text('home.gotIt', { name: item.ingredient.name }),
-        action: { label: text('toast.undo'), run: () => void undoCheckOff(item) },
+        action: { label: text('toast.undo'), run: () => void this.undoCheckOff(item) },
       });
     } catch (error) {
-      actionFailed(error, () => void checkOff(item));
+      actionFailed(error, () => void this.checkOff(item));
     }
-  };
+  }
 
-  const undoCheckOff = async (item: ShoppingListItem): Promise<void> => {
+  private async undoCheckOff(item: ShoppingListItem): Promise<void> {
     try {
       await call('addToShoppingList', { body: { items: [{ ingredientId: item.ingredient.id, count: item.count }] } });
-      invalidate('shopping');
+      dataChanged('shopping');
       toast({ title: text('toast.undone') });
     } catch (error) {
-      actionFailed(error, () => void undoCheckOff(item));
+      actionFailed(error, () => void this.undoCheckOff(item));
     }
-  };
+  }
 
-  const loadCatalog = async (): Promise<void> => {
+  private async loadCatalog(): Promise<void> {
     try {
       const finished = await followJob(
         await call('loadCatalog', {}),
         (job) => {
-          catalogJob = job;
-          redraw();
+          if (this.isConnected) {
+            this.catalogJob.value = job;
+          }
         },
-        () => element.isConnected,
+        () => this.isConnected,
       );
-      catalogJob = null;
+      if (this.isConnected) {
+        this.catalogJob.value = null;
+      }
       if (finished?.state === 'succeeded') {
-        await ctx.person.refresh();
-        invalidate('recipes', 'ingredients', 'shelf', 'settings');
+        await session.refresh();
+        dataChanged('recipes', 'ingredients', 'shelf', 'settings');
       } else if (finished !== null) {
         toast({ title: finished.error?.detail ?? text('home.catalogFailed'), variant: 'error' });
       }
     } catch (error) {
-      catalogJob = null;
-      actionFailed(error, () => void loadCatalog());
+      if (this.isConnected) {
+        this.catalogJob.value = null;
+      }
+      actionFailed(error, () => void this.loadCatalog());
     }
-    redraw();
-  };
+  }
 
-  const hero = (data: Home, session: SessionPerson, empty: boolean): TemplateResult => {
-    const recipes = top.peek()?.items ?? [];
-    const pictured = darkPhotosFirst(recipes.length > 0 ? recipes : (anyRecipes.peek()?.items ?? []));
-    const missingOne = top.peek()?.facets.missing1 ?? 0;
-    const catalogMissing = !session.household.catalogLoaded;
+  private hero(data: Home, person: SessionPerson, empty: boolean): TemplateResult {
+    const recipes = this.top.value.value?.items ?? [];
+    const pictured = darkPhotosFirst(recipes.length > 0 ? recipes : (this.anyRecipes.value.value?.items ?? []));
+    const missingOne = this.top.value.value?.facets.missing1 ?? 0;
+    const catalogMissing = !person.household.catalogLoaded;
     return html`<div class="cl-hero">
-      ${collage(pictured, arrival)}
+      ${collage(pictured, this.arrival)}
       <div class="cl-hero-top">
         <span class="cl-wordmark cl-hero-mark"><span class="cl-mark" aria-hidden="true"></span>${text('app.name')}</span>
         <span class="cl-hero-actions">
@@ -190,25 +217,25 @@ export function screen(ctx: ScreenContext): HTMLElement {
           ></a>
           <a class="cl-hero-account" href=${href('/settings/profile')}
             ><lc-icon name="user-round" aria-hidden="true"></lc-icon
-            ><span class="cl-vh">${text('nav.account', { name: session.person.name })}</span></a
+            ><span class="cl-vh">${text('nav.account', { name: person.person.name })}</span></a
           >
         </span>
       </div>
       <div class="cl-canmake">
-        <p class="cl-canmake-greeting">${greeting(session.person.name, new Date())}</p>
+        <p class="cl-canmake-greeting">${greeting(person.person.name, new Date())}</p>
         ${
           empty
             ? html`<cl-figure
                 size="hero"
                 value=${data.canMake.total}
                 label=${catalogMissing ? text('home.noCatalogLabel') : text('home.emptyLabel')}
-                ?count-up=${arrival}
+                ?count-up=${this.arrival}
               ></cl-figure>`
             : html`<cl-figure
                 size="hero"
                 value=${data.canMake.count}
                 label=${text('home.canMakeLabel')}
-                ?count-up=${arrival}
+                ?count-up=${this.arrival}
               >
                 ${
                   missingOne > 0
@@ -224,10 +251,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
         }
       </div>
     </div>`;
-  };
+  }
 
-  const catalogNotice = (): TemplateResult | typeof nothing => {
-    const update = notifications?.peek()?.notifications.find((note) => note.kind === 'catalog_update_available');
+  private catalogNotice(): TemplateResult | typeof nothing {
+    const update = this.notifications.value.value?.notifications.find(
+      (note) => note.kind === 'catalog_update_available',
+    );
     if (update === undefined || update.version === null) {
       return nothing;
     }
@@ -237,10 +266,10 @@ export function screen(ctx: ScreenContext): HTMLElement {
         <lc-button variant="quiet" href=${href('/settings/catalog')}>${text('home.updateSee')}</lc-button>
       </div>
     </lc-alert>`;
-  };
+  }
 
-  const liveCard = (data: Home): TemplateResult | typeof nothing =>
-    data.liveMenu === null
+  private liveCard(data: Home): TemplateResult | typeof nothing {
+    return data.liveMenu === null
       ? nothing
       : html`<cl-live-card
           class="cl-rise"
@@ -249,39 +278,43 @@ export function screen(ctx: ScreenContext): HTMLElement {
           drinks=${data.liveMenu.itemCount}
           href=${`/menus/${data.liveMenu.id}`}
         ></cl-live-card>`;
+  }
 
-  const buyNext = (data: Home): TemplateResult | typeof nothing =>
-    data.buyNext.length === 0
-      ? nothing
-      : html`<section class="cl-home-section cl-rise" style="--i:1" aria-labelledby="home-buy-next">
-          <div class="cl-section-head">
-            <h2 class="cl-section-title" id="home-buy-next">${text('home.buyNext')}</h2>
-            <a class="cl-standalone-link" href=${href('/stats')}>${text('home.buyNextAll')}</a>
+  private buyNext(data: Home): TemplateResult | typeof nothing {
+    if (data.buyNext.length === 0) {
+      return nothing;
+    }
+    const added = this.added.value;
+    return html`<section class="cl-home-section cl-rise" style="--i:1" aria-labelledby="home-buy-next">
+      <div class="cl-section-head">
+        <h2 class="cl-section-title" id="home-buy-next">${text('home.buyNext')}</h2>
+        <a class="cl-standalone-link" href=${href('/stats')}>${text('home.buyNextAll')}</a>
+      </div>
+      ${data.buyNext.map((item) => {
+        const listed = added.has(item.ingredient.id);
+        return html`<div class="cl-buy-row">
+          <p class="cl-buy-count">+${formatNumber(item.unlocks)}<small>${text('home.drinks')}</small></p>
+          <div class="cl-buy-what">
+            <p class="cl-buy-name">${item.ingredient.name}</p>
+            <p class="cl-buy-unlocks">${item.recipes.map((recipe) => recipe.name).join(', ')}</p>
           </div>
-          ${data.buyNext.map((item) => {
-            const listed = added.has(item.ingredient.id);
-            return html`<div class="cl-buy-row">
-              <p class="cl-buy-count">+${formatNumber(item.unlocks)}<small>${text('home.drinks')}</small></p>
-              <div class="cl-buy-what">
-                <p class="cl-buy-name">${item.ingredient.name}</p>
-                <p class="cl-buy-unlocks">${item.recipes.map((recipe) => recipe.name).join(', ')}</p>
-              </div>
-              <lc-button
-                class="cl-buy-add"
-                variant="quiet"
-                icon-only
-                aria-label=${listed ? text('home.onList') : text('home.addToList', { name: item.ingredient.name })}
-                ?disabled=${listed}
-                @click=${() => void addToList(item)}
-              >
-                <lc-icon name=${listed ? 'check' : 'plus'} aria-hidden="true"></lc-icon>
-              </lc-button>
-            </div>`;
-          })}
-        </section>`;
+          <lc-button
+            class="cl-buy-add"
+            variant="quiet"
+            icon-only
+            aria-label=${listed ? text('home.onList') : text('home.addToList', { name: item.ingredient.name })}
+            ?disabled=${listed}
+            @click=${() => void this.addToList(item)}
+          >
+            <lc-icon name=${listed ? 'check' : 'plus'} aria-hidden="true"></lc-icon>
+          </lc-button>
+        </div>`;
+      })}
+    </section>`;
+  }
 
-  const shoppingPanel = (index: number): TemplateResult => {
-    const items = shopping.peek()?.items ?? [];
+  private shoppingPanel(index: number): TemplateResult {
+    const items = this.shopping.value.value?.items ?? [];
     const rest = items.length - SHOPPING_PREVIEW_SIZE;
     return html`<section class="cl-home-section cl-rise" style=${`--i:${index}`} aria-labelledby="home-shopping">
       <div class="cl-section-head">
@@ -305,7 +338,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
                     label=${item.ingredient.name}
                     @change=${(event: Event) => {
                       if (eventChecked(event)) {
-                        void checkOff(item);
+                        void this.checkOff(item);
                       }
                     }}
                   ></lc-checkbox>
@@ -322,10 +355,10 @@ export function screen(ctx: ScreenContext): HTMLElement {
         }
       </div>
     </section>`;
-  };
+  }
 
-  const shelfStrip = (): TemplateResult | typeof nothing => {
-    const page = bottles.peek();
+  private shelfStrip(): TemplateResult | typeof nothing {
+    const page = this.bottles.value.value;
     if (page === undefined || page.items.length === 0) {
       return nothing;
     }
@@ -336,11 +369,12 @@ export function screen(ctx: ScreenContext): HTMLElement {
       </div>
       <lc-scroller class="cl-strip">${page.items.map(bottleTile)}</lc-scroller>
     </section>`;
-  };
+  }
 
-  const startHere = (session: SessionPerson): TemplateResult => {
-    const catalogMissing = !session.household.catalogLoaded;
-    const ownerName = session.person.role === 'owner';
+  private startHere(person: SessionPerson): TemplateResult {
+    const catalogMissing = !person.household.catalogLoaded;
+    const ownerName = person.person.role === 'owner';
+    const job = this.catalogJob.value;
     return html`<section class="cl-home-section" aria-labelledby="home-start">
       <div class="cl-section-head"><h2 class="cl-section-title" id="home-start">${text('home.startHere')}</h2></div>
       <ol class="cl-steps">
@@ -351,10 +385,10 @@ export function screen(ctx: ScreenContext): HTMLElement {
                   <b>${text('home.stepCatalog')}</b>
                   <p>${text('home.stepCatalogBody')}</p>
                   ${
-                    catalogJob !== null
-                      ? jobProgress(catalogJob, text('home.catalogLoading'))
+                    job !== null
+                      ? jobProgress(job, text('home.catalogLoading'))
                       : ownerName
-                        ? html`<lc-button variant="primary" @click=${() => void loadCatalog()}>
+                        ? html`<lc-button variant="primary" @click=${() => void this.loadCatalog()}>
                             <lc-icon name="book-open" aria-hidden="true"></lc-icon>${text('home.loadCatalog')}
                           </lc-button>`
                         : html`<p>${text('home.askOwner')}</p>`
@@ -392,41 +426,45 @@ export function screen(ctx: ScreenContext): HTMLElement {
         </li>
       </ol>
     </section>`;
-  };
+  }
 
-  const ready = (data: Home, session: SessionPerson): TemplateResult => {
-    const empty = !session.household.catalogLoaded || (data.canMake.count === 0 && bottles.peek()?.total === 0);
+  private ready(data: Home, person: SessionPerson): TemplateResult {
+    const empty =
+      !person.household.catalogLoaded || (data.canMake.count === 0 && this.bottles.value.value?.total === 0);
     if (empty) {
-      return html`${hero(data, session, true)}
+      return html`${this.hero(data, person, true)}
         <div class="cl-home-grid">
-          ${startHere(session)}
-          <div class="cl-stack">${shoppingPanel(2)}</div>
+          ${this.startHere(person)}
+          <div class="cl-stack">${this.shoppingPanel(2)}</div>
         </div>`;
     }
-    return html`${hero(data, session, false)} ${catalogNotice()}
+    return html`${this.hero(data, person, false)} ${this.catalogNotice()}
       <div class="cl-home-grid">
-        <div class="cl-stack">${liveCard(data)}${buyNext(data)}</div>
-        <div class="cl-stack">${shoppingPanel(2)}${shelfStrip()}</div>
+        <div class="cl-stack">${this.liveCard(data)}${this.buyNext(data)}</div>
+        <div class="cl-stack">${this.shoppingPanel(2)}${this.shelfStrip()}</div>
       </div>`;
-  };
+  }
 
-  const resources = [home, top, anyRecipes, bottles, shopping, ...(notifications === null ? [] : [notifications])];
-  const { redraw } = watch(element, resources, ({ phase, retry }) => {
-    const session = ctx.person.current();
-    const data = home.peek();
-    if (phase === 'failed') {
-      render(loadFailed(text('title.home'), retry), element);
-      return;
+  render() {
+    const person = session.current.value;
+    const data = this.home.value.value;
+    switch (this.state.phase.value) {
+      case 'failed':
+        return loadFailed(text('title.home'), this.state.retry, 'refresh');
+      case 'slow':
+        return html`${skeleton('figure', text('title.home'))}${skeleton('rows', text('title.home'))}`;
+      case 'ready':
+        return person === null || data === undefined ? nothing : this.ready(data, person);
+      case 'loading':
+        return nothing;
     }
-    if (phase === 'slow') {
-      render(html`${skeleton('figure', text('title.home'))}${skeleton('rows', text('title.home'))}`, element);
-      return;
-    }
-    if (phase !== 'ready' || session === null || data === undefined) {
-      return;
-    }
-    render(ready(data, session), element);
-  });
-  setAppBar({ hidden: true });
-  return element;
+  }
+}
+
+View.register(tag, HomeScreen);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: HomeScreen;
+  }
 }

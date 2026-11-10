@@ -22,7 +22,12 @@
 }
 
 .cl-import-form {
+  --lc-form-gap: var(--space-4);
   padding-top: 0;
+}
+
+.cl-import-csv {
+  display: block;
 }
 
 .cl-import-heading {

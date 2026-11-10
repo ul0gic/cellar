@@ -9,32 +9,42 @@ import {
   type RecipeLineInput,
 } from '@cellar/contract';
 import type { FormField } from '@lightstart/components/types.js';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal, untracked } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
+import { session } from '../../app/controllers/session.ts';
 import { eventText } from '../../app/events.ts';
-import { onLeave } from '../../app/load.ts';
+import { type LoadPhase, loadState } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
-import { invalidate } from '../../app/resources.ts';
-import { href, router } from '../../app/router.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { blockWhile, href, navigate } from '../../app/router.ts';
+import type { RouteParams } from '../../app/types.ts';
 import type { ImageUpload } from '../../design-system/cl-image-field.ts';
 import { confirm } from '../../design-system/dialogs.ts';
-import { illustration } from '../../design-system/illustration.ts';
+import { loadFailed } from '../../design-system/load-view.ts';
 import { skeleton } from '../../design-system/skeleton.ts';
 import { thumbHashDataUrl } from '../../design-system/thumbhash.ts';
 import { toast } from '../../design-system/toast.ts';
 import { text } from '../../text/index.ts';
 import { openActions } from './parts/actions.ts';
 import { openPhotoSheet } from './parts/ai-sheets.ts';
-import { BLANK_LINE, type LineDraft, registerLineFields, toUnit } from './parts/line-fields.ts';
+import { BLANK_LINE, type LineDraft, toUnit } from './parts/line-fields.ts';
 import { openSheet } from './parts/sheet.ts';
+import { notFound } from './parts/view.ts';
+import '../../design-system/cl-image-field.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/form.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/image.ts';
+import '../../design-system/lc/input.ts';
+import '../../design-system/lc/progress-bar.ts';
+import '../../design-system/lc/tag.ts';
+import '../../design-system/lc/textarea.ts';
 import './form.css';
 
-interface Taxonomy {
-  readonly glasses: readonly { value: string; label: string }[];
-  readonly methods: readonly { value: string; label: string }[];
-  readonly utensils: readonly { value: string; label: string }[];
-}
+export const tag = 'cl-screen-recipes-form';
 
 interface Values {
   name: string;
@@ -98,7 +108,7 @@ function valuesOf(recipe: Recipe): Values {
     methodId: recipe.method === null ? '' : String(recipe.method.id),
     garnish: recipe.garnish,
     year: recipe.year === null ? '' : String(recipe.year),
-    tags: recipe.tags.map((tag) => tag.name),
+    tags: recipe.tags.map((entry) => entry.name),
     utensilIds: recipe.utensils.map((utensil) => String(utensil.id)),
     source: recipe.source,
   };
@@ -297,131 +307,183 @@ function withServerErrors(
   return { values: { ...values, lines }, errors };
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  registerLineFields();
-  const element = document.createElement('section');
-  element.className = 'cl-recipe-form cl-reading';
-  const editId = ctx.params.id === undefined ? null : Number(ctx.params.id);
-  const backPath = editId === null ? '/recipes' : `/recipes/${editId}`;
-  let values = emptyValues();
-  let images: ImageRef[] = [];
-  let recipe: Recipe | null = null;
-  let taxonomy: Taxonomy | null = null;
-  let notice: Notice = null;
-  let problems: readonly string[] = [];
-  let errors: Record<string, string> = {};
-  let dirty = false;
-  let saving = false;
-  let failed = false;
-  let missing = false;
+const tagsHandler = {
+  tags: {
+    render: (_field: FormField, value: unknown, onChange: (next: unknown) => void): TemplateResult => {
+      const names = Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [];
+      return html`<div class="cl-tags-field">
+        <span class="cl-tags-list">
+          ${names.map(
+            (name) => html`<lc-tag
+              closable
+              aria-label=${text('recipes.removeTag', { name })}
+              @close=${() => onChange(names.filter((item) => item !== name))}
+            >${name}</lc-tag>`,
+          )}
+        </span>
+        ${
+          names.length < LIMITS.recipeTags.max
+            ? html`<lc-input
+                label=${text('recipes.addTag')}
+                maxlength=${LIMITS.tagName.max}
+                @keydown=${(event: KeyboardEvent) => {
+                  const target = event.target;
+                  if (event.key !== 'Enter' || !(target instanceof HTMLInputElement)) {
+                    return;
+                  }
+                  event.preventDefault();
+                  const name = target.value.trim();
+                  if (name !== '' && !names.includes(name)) {
+                    onChange([...names, name]);
+                  }
+                  target.value = '';
+                }}
+              ></lc-input>`
+            : nothing
+        }
+      </div>`;
+    },
+  },
+};
 
-  let unblock: (() => void) | null = null;
-  const setDirty = (next: boolean): void => {
-    dirty = next;
-    if (dirty && unblock === null) {
-      unblock = router.block(() =>
-        confirm({
+function options(items: readonly { id: number; name: string }[] | undefined): { value: string; label: string }[] {
+  return (items ?? []).map((item) => ({ value: String(item.id), label: item.name }));
+}
+
+class RecipesForm extends View {
+  params: RouteParams = {};
+  readonly values = signal<Values | null>(null);
+  readonly images = signal<readonly ImageRef[]>([]);
+  readonly notice = signal<Notice>(null);
+  readonly problems = signal<readonly string[]>([]);
+  readonly errors = signal<Record<string, string>>({});
+  readonly dirty = signal(false);
+  readonly saving = signal(false);
+  readonly asked = signal(false);
+  readonly fresh = signal(false);
+  readonly glasses = apiResource('listGlasses', []);
+  readonly methods = apiResource('listMethods', []);
+  readonly utensils = apiResource('listUtensils', []);
+  readonly recipe = apiResource('getRecipe', []);
+  readonly lists = loadState([this.glasses, this.methods, this.utensils]);
+  readonly record = loadState([this.recipe]);
+
+  get editId(): number | null {
+    return this.params.id === undefined ? null : Number(this.params.id);
+  }
+
+  get valid(): boolean {
+    const id = this.editId;
+    return id === null || (Number.isSafeInteger(id) && id >= 1);
+  }
+
+  get backPath(): string {
+    return this.editId === null ? '/recipes' : `/recipes/${this.editId}`;
+  }
+
+  get existing(): Recipe | null {
+    return this.editId === null ? null : (this.recipe.value.value ?? null);
+  }
+
+  recordPhase(): LoadPhase {
+    if (this.fresh.value) {
+      return this.record.phase.value;
+    }
+    return this.record.error.value === null ? 'loading' : 'failed';
+  }
+
+  async renew(): Promise<void> {
+    await this.recipe.refresh();
+    if (this.isConnected) {
+      this.fresh.value = this.recipe.error.peek() === null;
+    }
+  }
+
+  status(): LoadPhase {
+    const phases = [this.lists.phase.value, ...(this.editId === null ? [] : [this.recordPhase()])];
+    if (phases.every((phase) => phase === 'ready')) {
+      return 'ready';
+    }
+    if (phases.includes('failed')) {
+      return 'failed';
+    }
+    return phases.includes('slow') ? 'slow' : 'loading';
+  }
+
+  connected(): void {
+    this.classList.add('cl-recipe-form', 'cl-reading');
+    if (!this.valid) {
+      return;
+    }
+    this.glasses.bind(this, {});
+    this.methods.bind(this, {});
+    this.utensils.bind(this, {});
+    const editId = this.editId;
+    if (editId !== null) {
+      this.recipe.bind(this, { params: { id: editId } });
+      if (!this.asked.peek()) {
+        this.asked.value = true;
+        if (this.recipe.value.peek() === undefined) {
+          this.fresh.value = true;
+        } else {
+          void this.renew();
+        }
+      }
+    }
+    blockWhile(
+      this,
+      () => this.dirty.value,
+      () =>
+        confirm(this, {
           title: text('recipes.leaveTitle'),
-          message: recipe === null ? text('recipes.leaveBodyNew') : text('recipes.leaveBody', { name: recipe.name }),
+          message:
+            this.existing === null
+              ? text('recipes.leaveBodyNew')
+              : text('recipes.leaveBody', { name: this.existing.name }),
           confirmLabel: text('recipes.discardChanges'),
           cancelLabel: text('recipes.keepEditing'),
           danger: true,
         }),
-      );
-    } else if (!dirty && unblock !== null) {
-      unblock();
-      unblock = null;
+    );
+    const fill = effect(() => {
+      if (this.status() === 'ready' && this.values.peek() === null) {
+        untracked(() => this.fill());
+      }
+    });
+    this.$own(() => fill.dispose());
+  }
+
+  fill(): void {
+    const existing = this.existing;
+    const draft = draftFromHistory();
+    if (existing !== null) {
+      this.values.value = valuesOf(existing);
+      this.images.value = [...existing.images];
+    } else if (draft !== null) {
+      this.applyDraft(draft);
+    } else {
+      this.values.value = emptyValues();
     }
-  };
-  onLeave(element, () => setDirty(false));
+    if (existing === null && draft === null && describeRequested()) {
+      this.draftFromText();
+    }
+  }
 
-  const fields = (): FormField[] => [
-    { name: 'name', type: 'text', label: text('recipes.fieldName'), required: true },
-    { name: 'description', type: 'textarea', label: text('recipes.fieldDescription'), rows: 3 },
-    {
-      name: 'lines',
-      type: 'array',
-      label: text('recipes.fieldLines'),
-      max: LIMITS.recipeLines.max,
-      addLabel: text('recipes.addLine'),
-      emptyLabel: text('recipes.noLines'),
-      itemField: { name: 'line', type: 'recipe-line', defaultValue: BLANK_LINE },
-    },
-    { name: 'instructions', type: 'textarea', label: text('recipes.fieldInstructions'), rows: 5 },
-    {
-      name: 'glassId',
-      type: 'select',
-      label: text('recipes.fieldGlass'),
-      searchable: true,
-      placeholder: text('recipes.noGlass'),
-      options: [{ value: '', label: text('recipes.noGlass') }, ...(taxonomy?.glasses ?? [])],
-    },
-    {
-      name: 'methodId',
-      type: 'select',
-      label: text('recipes.fieldMethod'),
-      placeholder: text('recipes.noMethod'),
-      options: [{ value: '', label: text('recipes.noMethod') }, ...(taxonomy?.methods ?? [])],
-    },
-    { name: 'garnish', type: 'text', label: text('recipes.fieldGarnish') },
-    { name: 'year', type: 'number', label: text('recipes.fieldYear'), min: 1700, max: 2100, step: 1 },
-    { name: 'tags', type: 'tags', label: text('recipes.fieldTags') },
-    {
-      name: 'utensilIds',
-      type: 'multi-select',
-      label: text('recipes.fieldUtensils'),
-      max: LIMITS.recipeUtensils.max,
-      options: [...(taxonomy?.utensils ?? [])],
-    },
-    { name: 'source', type: 'text', label: text('recipes.fieldSource') },
-  ];
+  changed(patch: Partial<Values>): void {
+    const values = this.values.peek();
+    if (values !== null) {
+      this.values.value = { ...values, ...patch };
+      this.dirty.value = true;
+    }
+  }
 
-  const changed = (patch: Partial<Values>): void => {
-    values = { ...values, ...patch };
-    setDirty(true);
-    draw();
-  };
+  applyDraft(draft: RecipeDraft): void {
+    this.values.value = valuesOfDraft(draft);
+    this.notice.value = draftNotice(draft);
+    this.dirty.value = true;
+  }
 
-  const tagsHandler = {
-    tags: {
-      render: (_field: FormField, value: unknown, onChange: (next: unknown) => void): TemplateResult => {
-        const tags = Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : [];
-        return html`<div class="cl-tags-field">
-          <span class="cl-tags-list">
-            ${tags.map(
-              (tag) => html`<lc-tag
-                closable
-                aria-label=${text('recipes.removeTag', { name: tag })}
-                @close=${() => onChange(tags.filter((item) => item !== tag))}
-              >${tag}</lc-tag>`,
-            )}
-          </span>
-          ${
-            tags.length < LIMITS.recipeTags.max
-              ? html`<lc-input
-                  label=${text('recipes.addTag')}
-                  maxlength=${LIMITS.tagName.max}
-                  @keydown=${(event: KeyboardEvent) => {
-                    const target = event.target;
-                    if (event.key !== 'Enter' || !(target instanceof HTMLInputElement)) {
-                      return;
-                    }
-                    event.preventDefault();
-                    const tag = target.value.trim();
-                    if (tag !== '' && !tags.includes(tag)) {
-                      onChange([...tags, tag]);
-                    }
-                    target.value = '';
-                  }}
-                ></lc-input>`
-              : nothing
-          }
-        </div>`;
-      },
-    },
-  };
-
-  const upload = async (picked: ImageUpload, sheet: { close(): void }): Promise<void> => {
+  async upload(picked: ImageUpload, sheet: { close(): void }): Promise<void> {
     const form = new FormData();
     form.append('file', picked.file, 'photo.webp');
     form.append('purpose', picked.purpose);
@@ -430,28 +492,29 @@ export function screen(ctx: ScreenContext): HTMLElement {
     form.append('thumbhash', picked.thumbhash);
     try {
       const image = await call('uploadImage', { body: form });
-      images = [...images, image];
-      setDirty(true);
       sheet.close();
-      draw();
+      if (this.isConnected) {
+        this.images.value = [...this.images.peek(), image];
+        this.dirty.value = true;
+      }
     } catch (error) {
-      actionFailed(error, () => void upload(picked, sheet));
+      actionFailed(error, () => void this.upload(picked, sheet));
     }
-  };
+  }
 
-  const addPhoto = (): void => {
-    const sheet = openSheet({
+  addPhoto(): void {
+    const sheet = openSheet(this, {
       centered: true,
       heading: () => text('recipes.cropHeading'),
       body: () =>
-        html`<cl-image-field purpose="recipe" .change=${(picked: ImageUpload) => void upload(picked, sheet)}></cl-image-field>`,
+        html`<cl-image-field purpose="recipe" .change=${(picked: ImageUpload) => void this.upload(picked, sheet)}></cl-image-field>`,
       footer: () => html`<lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>`,
     });
-  };
+  }
 
-  const movePhoto = (index: number, by: number): void => {
+  movePhoto(index: number, by: number): void {
     const to = index + by;
-    const next = [...images];
+    const next = [...this.images.peek()];
     const moving = next[index];
     const other = next[to];
     if (moving === undefined || other === undefined) {
@@ -459,68 +522,59 @@ export function screen(ctx: ScreenContext): HTMLElement {
     }
     next[index] = other;
     next[to] = moving;
-    images = next;
-    setDirty(true);
-    draw();
-  };
+    this.images.value = next;
+    this.dirty.value = true;
+  }
 
-  const photoMenu = (trigger: Element, index: number): void => {
+  photoMenu(trigger: Element, index: number): void {
     const name = text('recipes.photoNumber', { position: index + 1 });
-    openActions(trigger, name, [
+    openActions(this, trigger, name, [
       {
         label: text('recipes.photoLeft'),
         icon: 'chevron-left',
         disabled: index === 0,
-        onClick: () => movePhoto(index, -1),
+        onClick: () => this.movePhoto(index, -1),
       },
       {
         label: text('recipes.photoRight'),
         icon: 'chevron-right',
-        disabled: index === images.length - 1,
-        onClick: () => movePhoto(index, 1),
+        disabled: index === this.images.peek().length - 1,
+        onClick: () => this.movePhoto(index, 1),
       },
       {
         label: text('crop.remove'),
         icon: 'trash-2',
         danger: true,
         onClick: () => {
-          images = images.filter((_, position) => position !== index);
-          setDirty(true);
-          draw();
+          this.images.value = this.images.peek().filter((_, position) => position !== index);
+          this.dirty.value = true;
         },
       },
     ]);
-  };
+  }
 
-  const applyDraft = (draft: RecipeDraft): void => {
-    values = valuesOfDraft(draft);
-    notice = draftNotice(draft);
-    setDirty(true);
-    draw();
-  };
-
-  const draftFromText = (): void => {
-    let described = '';
-    let working = false;
-    let message = '';
+  draftFromText(): void {
+    const described = signal('');
+    const working = signal(false);
+    const message = signal('');
     const run = async (): Promise<void> => {
-      working = true;
-      message = '';
-      sheet.redraw();
+      working.value = true;
+      message.value = '';
       try {
-        const draft = await call('aiDraftRecipe', { body: { text: described } });
+        const draft = await call('aiDraftRecipe', { body: { text: described.peek() } });
         sheet.close();
-        applyDraft(draft);
+        if (this.isConnected) {
+          this.applyDraft(draft);
+        }
       } catch (error) {
         if (!(error instanceof ApiError)) {
           throw error;
         }
-        working = false;
-        message = error.code === 'ai_timeout' ? text('recipes.aiTimeout') : error.detail;
-        sheet.redraw();
+        working.value = false;
+        message.value = error.code === 'ai_timeout' ? text('recipes.aiTimeout') : error.detail;
       }
     };
-    const sheet = openSheet({
+    const sheet = openSheet(this, {
       centered: true,
       heading: () => text('recipes.describeHeading'),
       body: () => html`
@@ -528,66 +582,78 @@ export function screen(ctx: ScreenContext): HTMLElement {
           label=${text('recipes.describeField')}
           rows="6"
           maxlength=${LIMITS.aiText.max}
-          value=${described}
+          value=${described.value}
           @input=${(event: Event) => {
-            described = eventText(event);
-            sheet.redraw();
+            described.value = eventText(event);
           }}
         ></lc-textarea>
-        ${working ? html`<lc-progress-bar indeterminate label=${text('recipes.describeWorking')}></lc-progress-bar>` : nothing}
-        ${message === '' ? nothing : html`<lc-alert variant="error" icon="circle-alert" title=${text('recipes.aiFailedTitle')}>${message}</lc-alert>`}
+        ${working.value ? html`<lc-progress-bar indeterminate label=${text('recipes.describeWorking')}></lc-progress-bar>` : nothing}
+        ${message.value === '' ? nothing : html`<lc-alert variant="error" icon="circle-alert" title=${text('recipes.aiFailedTitle')}>${message.value}</lc-alert>`}
       `,
       footer: () => html`
         <lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
-        <lc-button variant="primary" ?disabled=${working || described.trim() === ''} @click=${() => void run()}
+        <lc-button variant="primary" ?disabled=${working.value || described.value.trim() === ''} @click=${() => void run()}
           >${text('recipes.describeRun')}</lc-button
         >
       `,
     });
-  };
+  }
 
-  const save = async (): Promise<void> => {
-    const built = build(values, images, recipe?.parent?.id ?? null);
-    values = built.values;
-    problems = built.problems;
-    errors = built.nameError === '' ? {} : { name: built.nameError };
-    if (built.input === null) {
-      draw();
-      element.querySelector<HTMLElement>('.cl-form-problems')?.focus();
+  async save(): Promise<void> {
+    const current = this.values.peek();
+    if (current === null) {
       return;
     }
-    saving = true;
-    draw();
+    const built = build(current, this.images.peek(), this.existing?.parent?.id ?? null);
+    this.values.value = built.values;
+    this.problems.value = built.problems;
+    this.errors.value = built.nameError === '' ? {} : { name: built.nameError };
+    if (built.input === null) {
+      await this.$requestUpdate();
+      this.querySelector<HTMLElement>('.cl-form-problems')?.focus();
+      return;
+    }
+    this.saving.value = true;
+    const editId = this.editId;
     try {
       const saved =
         editId === null
           ? await call('createRecipe', { body: built.input })
           : await call('replaceRecipe', { params: { id: editId }, body: built.input });
-      invalidate('recipes', 'collections', 'menus', 'stats');
-      setDirty(false);
+      dataChanged('recipes', 'collections', 'menus', 'stats');
       toast({ title: text('recipes.saved') });
-      ctx.navigate(`/recipes/${saved.id}`, { replace: editId === null });
+      if (this.isConnected) {
+        this.dirty.value = false;
+        navigate(`/recipes/${saved.id}`, { replace: editId === null });
+      }
     } catch (error) {
-      saving = false;
-      if (error instanceof ApiError && error.code === 'validation_failed' && error.fields.length > 0) {
-        const placed = withServerErrors(values, error.fields);
-        values = placed.values;
-        errors = placed.errors;
-        problems = error.fields.map((field) => field.message);
-        draw();
+      if (this.isConnected) {
+        this.saving.value = false;
+      }
+      if (
+        this.isConnected &&
+        error instanceof ApiError &&
+        error.code === 'validation_failed' &&
+        error.fields.length > 0
+      ) {
+        const placed = withServerErrors(this.values.peek() ?? built.values, error.fields);
+        this.values.value = placed.values;
+        this.errors.value = placed.errors;
+        this.problems.value = error.fields.map((field) => field.message);
         return;
       }
-      draw();
-      actionFailed(error, () => void save());
+      actionFailed(error, () => void this.save());
     }
-  };
+  }
 
-  const remove = async (): Promise<void> => {
-    if (recipe === null || editId === null) {
+  async deleteRecipe(): Promise<void> {
+    const existing = this.existing;
+    const editId = this.editId;
+    if (existing === null || editId === null) {
       return;
     }
-    const sure = await confirm({
-      title: text('recipes.deleteTitle', { name: recipe.name }),
+    const sure = await confirm(this, {
+      title: text('recipes.deleteTitle', { name: existing.name }),
       message: text('recipes.deleteBody'),
       confirmLabel: text('recipes.deleteRecipe'),
       danger: true,
@@ -597,18 +663,65 @@ export function screen(ctx: ScreenContext): HTMLElement {
     }
     try {
       await call('deleteRecipe', { params: { id: editId } });
-      invalidate('recipes', 'collections', 'menus', 'stats');
-      setDirty(false);
-      ctx.navigate('/recipes', { replace: true });
+      this.recipe.release();
+      dataChanged('recipes', 'collections', 'menus', 'stats');
+      if (this.isConnected) {
+        this.dirty.value = false;
+        navigate('/recipes', { replace: true });
+      }
       toast({ title: text('toast.deleted') });
     } catch (error) {
-      actionFailed(error, () => void remove());
+      actionFailed(error, () => void this.deleteRecipe());
     }
-  };
+  }
 
-  const photos = (
-    aiEnabled: boolean,
-  ): TemplateResult => html`<section class="cl-form-photos" aria-labelledby="cl-form-photos">
+  fields(): FormField[] {
+    return [
+      { name: 'name', type: 'text', label: text('recipes.fieldName'), required: true },
+      { name: 'description', type: 'textarea', label: text('recipes.fieldDescription'), rows: 3 },
+      {
+        name: 'lines',
+        type: 'array',
+        label: text('recipes.fieldLines'),
+        max: LIMITS.recipeLines.max,
+        addLabel: text('recipes.addLine'),
+        emptyLabel: text('recipes.noLines'),
+        itemField: { name: 'line', type: 'recipe-line', defaultValue: BLANK_LINE },
+      },
+      { name: 'instructions', type: 'textarea', label: text('recipes.fieldInstructions'), rows: 5 },
+      {
+        name: 'glassId',
+        type: 'select',
+        label: text('recipes.fieldGlass'),
+        searchable: true,
+        placeholder: text('recipes.noGlass'),
+        options: [{ value: '', label: text('recipes.noGlass') }, ...options(this.glasses.value.value?.items)],
+      },
+      {
+        name: 'methodId',
+        type: 'select',
+        label: text('recipes.fieldMethod'),
+        placeholder: text('recipes.noMethod'),
+        options: [{ value: '', label: text('recipes.noMethod') }, ...options(this.methods.value.value?.items)],
+      },
+      { name: 'garnish', type: 'text', label: text('recipes.fieldGarnish') },
+      { name: 'year', type: 'number', label: text('recipes.fieldYear'), min: 1700, max: 2100, step: 1 },
+      { name: 'tags', type: 'tags', label: text('recipes.fieldTags') },
+      {
+        name: 'utensilIds',
+        type: 'multi-select',
+        label: text('recipes.fieldUtensils'),
+        max: LIMITS.recipeUtensils.max,
+        options: options(this.utensils.value.value?.items),
+      },
+      { name: 'source', type: 'text', label: text('recipes.fieldSource') },
+    ];
+  }
+
+  photos(aiEnabled: boolean): TemplateResult {
+    const images = this.images.value;
+    const existing = this.existing;
+    return html`<section class="cl-form-photos" aria-labelledby="cl-form-photos">
     <h2 id="cl-form-photos" class="cl-form-label">${text('recipes.photos')}</h2>
     <ul class="cl-form-photo-list">
       ${images.map(
@@ -625,7 +738,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
             aria-label=${text('recipes.photoActions', { position: index + 1 })}
             @click=${(event: MouseEvent) => {
               if (event.currentTarget instanceof Element) {
-                photoMenu(event.currentTarget, index);
+                this.photoMenu(event.currentTarget, index);
               }
             }}
           ><lc-icon name="ellipsis" aria-hidden="true"></lc-icon></button>
@@ -634,7 +747,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       ${
         images.length < LIMITS.recipeImages.max
           ? html`<li>
-              <button type="button" class="cl-form-photo-add" @click=${addPhoto}>
+              <button type="button" class="cl-form-photo-add" @click=${() => this.addPhoto()}>
                 <lc-icon name="image-plus" aria-hidden="true"></lc-icon>${text('recipes.addPhoto')}
               </button>
             </li>`
@@ -643,17 +756,22 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </ul>
     <p class="cl-sheet-hint">${text('recipes.photosHint')}</p>
     ${
-      aiEnabled && recipe !== null
-        ? html`<lc-button variant="ghost" @click=${() => recipe !== null && openPhotoSheet(recipe)}>
+      aiEnabled && existing !== null
+        ? html`<lc-button variant="ghost" @click=${() => openPhotoSheet(this, existing)}>
             <lc-icon name="sparkles" aria-hidden="true"></lc-icon>${text('recipes.generatePhoto')}
           </lc-button>`
         : nothing
     }
   </section>`;
+  }
 
-  const banners = (): TemplateResult => html`
+  banners(): TemplateResult {
+    const existing = this.existing;
+    const notice = this.notice.value;
+    const problems = this.problems.value;
+    return html`
         ${
-          recipe !== null && recipe.provenance === 'catalog' && !recipe.editedFromCatalog
+          existing !== null && existing.provenance === 'catalog' && !existing.editedFromCatalog
             ? html`<lc-alert variant="info" icon="info" title=${text('recipes.seedNotice')}></lc-alert>`
             : nothing
         }
@@ -674,133 +792,97 @@ export function screen(ctx: ScreenContext): HTMLElement {
               </div>`
         }
   `;
+  }
 
-  const draw = (): void => {
-    const session = ctx.person.current();
-    if (missing) {
-      render(
-        html`<lc-empty-state title=${text('recipes.notFoundTitle')} description=${text('recipes.notFoundBody')}>
-          ${illustration('empty-lost')}
-          <lc-button variant="primary" href=${href('/recipes')}>${text('recipes.backToRecipes')}</lc-button>
-        </lc-empty-state>`,
-        element,
-      );
-      return;
+  retry(): void {
+    this.lists.retry();
+    if (this.fresh.peek()) {
+      this.record.retry();
+    } else {
+      void this.renew();
     }
-    if (failed) {
-      render(
-        html`<lc-empty-state
-          title=${text('loadFailed.title', { screen: text(editId === null ? 'title.newRecipe' : 'title.editRecipe') })}
-          description=${text('loadFailed.body')}
-        >
-          ${illustration('empty-lost')}
-          <lc-button variant="primary" @click=${() => void load()}>${text('loadFailed.retry')}</lc-button>
-        </lc-empty-state>`,
-        element,
-      );
-      return;
+  }
+
+  render() {
+    if (!this.valid) {
+      return notFound();
     }
-    if (taxonomy === null || session === null) {
-      return;
+    const editId = this.editId;
+    const screen = text(editId === null ? 'title.newRecipe' : 'title.editRecipe');
+    switch (this.status()) {
+      case 'failed':
+        return editId !== null && this.record.error.value?.code === 'not_found'
+          ? notFound()
+          : loadFailed(screen, () => this.retry(), 'none');
+      case 'loading':
+      case 'slow':
+        return skeleton('lines', screen);
+      case 'ready':
+        break;
     }
-    const aiEnabled = session.household.aiEnabled;
-    element.querySelector('.cl-skeleton')?.remove();
-    render(
-      html`
+    const values = this.values.value;
+    const person = session.current.value;
+    if (values === null || person === null) {
+      return nothing;
+    }
+    const aiEnabled = person.household.aiEnabled;
+    const saving = this.saving.value;
+    return html`
         <header class="cl-form-head">
-          <a class="cl-form-back" href=${href(backPath)} aria-label=${text('action.back')}
+          <a class="cl-form-back" href=${href(this.backPath)} aria-label=${text('action.back')}
             ><lc-icon name="chevron-left" aria-hidden="true"></lc-icon
           ></a>
-          <h1 class="cl-form-title">${text(editId === null ? 'title.newRecipe' : 'title.editRecipe')}</h1>
+          <h1 class="cl-form-title">${screen}</h1>
           ${
             aiEnabled
-              ? html`<lc-button variant="ghost" @click=${draftFromText}>
+              ? html`<lc-button variant="ghost" @click=${() => this.draftFromText()}>
                   <lc-icon name="sparkles" aria-hidden="true"></lc-icon>${text('recipes.describeIt')}
                 </lc-button>`
               : nothing
           }
         </header>
-        ${banners()}
-        ${photos(aiEnabled)}
+        ${this.banners()}
+        ${this.photos(aiEnabled)}
         <lc-form
           layout="stacked"
-          .fields=${fields()}
+          .fields=${this.fields()}
           .data=${values}
-          .errors=${errors}
+          .errors=${this.errors.value}
           .typeHandlers=${tagsHandler}
           @field-change=${(event: Event) => {
             const detail: unknown = event instanceof CustomEvent ? event.detail : null;
             if (typeof detail === 'object' && detail !== null && 'name' in detail && 'value' in detail) {
               const name = detail.name;
               if (typeof name === 'string' && name in values) {
-                changed({ [name]: detail.value });
+                this.changed({ [name]: detail.value });
               }
             }
           }}
-          @form-submit=${() => void save()}
-          @form-invalid=${() => void save()}
+          @form-submit=${() => void this.save()}
+          @form-invalid=${() => void this.save()}
         >
           <div class="cl-form-footer">
             ${
-              recipe === null
+              this.existing === null
                 ? nothing
-                : html`<lc-button variant="ghost" class="cl-form-delete" @click=${() => void remove()}>
+                : html`<lc-button variant="ghost" class="cl-form-delete" @click=${() => void this.deleteRecipe()}>
                     <lc-icon name="trash-2" aria-hidden="true"></lc-icon>${text('recipes.deleteRecipe')}
                   </lc-button>`
             }
-            <lc-button variant="quiet" href=${href(backPath)}>${text('action.cancel')}</lc-button>
+            <lc-button variant="quiet" href=${href(this.backPath)}>${text('action.cancel')}</lc-button>
             <lc-button type="submit" variant="primary" ?disabled=${saving} aria-busy=${saving ? 'true' : nothing}
               >${text('recipes.saveRecipe')}</lc-button
             >
           </div>
         </lc-form>
-      `,
-      element,
-    );
-  };
-
-  const load = async (): Promise<void> => {
-    failed = false;
-    element.replaceChildren(skeleton('lines', text(editId === null ? 'title.newRecipe' : 'title.editRecipe')));
-    try {
-      const [glasses, methods, utensils, existing] = await Promise.all([
-        call('listGlasses', {}),
-        call('listMethods', {}),
-        call('listUtensils', {}),
-        editId === null ? Promise.resolve(null) : call('getRecipe', { params: { id: editId } }),
-      ]);
-      taxonomy = {
-        glasses: glasses.items.map((item) => ({ value: String(item.id), label: item.name })),
-        methods: methods.items.map((item) => ({ value: String(item.id), label: item.name })),
-        utensils: utensils.items.map((item) => ({ value: String(item.id), label: item.name })),
-      };
-      recipe = existing;
-      const draft = draftFromHistory();
-      if (existing !== null) {
-        values = valuesOf(existing);
-        images = [...existing.images];
-      } else if (draft !== null) {
-        applyDraft(draft);
-      }
-      draw();
-      if (existing === null && draft === null && describeRequested()) {
-        draftFromText();
-      }
-    } catch (error) {
-      if (!(error instanceof ApiError)) {
-        throw error;
-      }
-      missing = error.code === 'not_found';
-      failed = !missing;
-      draw();
-    }
-  };
-
-  if (editId !== null && (!Number.isSafeInteger(editId) || editId < 1)) {
-    missing = true;
-    draw();
-  } else {
-    void load();
+      `;
   }
-  return element;
+}
+
+View.register(tag, RecipesForm);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: RecipesForm;
+  }
 }

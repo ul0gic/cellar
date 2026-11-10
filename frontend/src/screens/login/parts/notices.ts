@@ -1,10 +1,10 @@
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
-import type { QuerySignal } from '../../../app/types.ts';
+import '../../../design-system/lc/alert.ts';
 import { formatDate } from '../../../text/format.ts';
 import { text } from '../../../text/index.ts';
 import { nextPath } from './handoff.ts';
 
-export function arrivalNotice(query: QuerySignal): TemplateResult | typeof nothing {
+export function arrivalNotice(query: URLSearchParams): TemplateResult | typeof nothing {
   const restored = query.get('restored');
   if (restored !== null && !Number.isNaN(Date.parse(restored))) {
     return html`<lc-alert class="cl-stage-banner" variant="info"

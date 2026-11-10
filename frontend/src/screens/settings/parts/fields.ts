@@ -1,5 +1,7 @@
 import { html, type TemplateResult } from '@lightstart/light/html';
 import { eventChecked, eventText } from '../../../app/events.ts';
+import '../../../design-system/lc/segmented.ts';
+import '../../../design-system/lc/switch.ts';
 
 export function switchField(
   label: string,

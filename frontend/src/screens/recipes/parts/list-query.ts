@@ -1,5 +1,5 @@
 import { LIMITS, type OperationInput, type RatingValue, type RecipeFacets } from '@cellar/contract';
-import type { QueryPatch, QuerySignal } from '../../../app/types.ts';
+import type { QueryPatch } from '../../../app/types.ts';
 
 export const STATUSES = ['can-make', 'missing-1', 'missing-2', 'all', 'favorites', 'made'] as const;
 export type Status = (typeof STATUSES)[number];
@@ -76,7 +76,7 @@ export function sortParam(sort: Sort, q: string | null): string | null {
   return sort === defaultSort(q) ? null : sort;
 }
 
-export function readState(query: QuerySignal): ListState {
+export function readState(query: URLSearchParams): ListState {
   const typed = (query.get('q') ?? '').trim().slice(0, LIMITS.searchQuery.max);
   const q = typed === '' ? null : typed;
   const status = STATUSES.find((item) => item === query.get('status')) ?? defaultStatus(q);

@@ -1,6 +1,14 @@
-import type { ScreenContext } from '../../app/types.ts';
-import { calculatorScreen } from './parts/calc-view.ts';
+import View from '@lightstart/light';
+import { CalculatorScreen } from './parts/calc-view.ts';
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  return calculatorScreen(ctx, null);
+export const tag = 'cl-screen-calculators-list';
+
+class CalculatorsList extends CalculatorScreen {}
+
+View.register(tag, CalculatorsList);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: CalculatorsList;
+  }
 }

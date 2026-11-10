@@ -1,5 +1,4 @@
 import { formatAmount, LIMITS, type PartyLine } from '@cellar/contract';
-import type { QuerySignal } from '../../../app/types.ts';
 import { formatNumber } from '../../../text/format.ts';
 
 // D-1 §8.8: the party servings stepper runs from 1 to 500.
@@ -28,7 +27,7 @@ function ids(raw: string | null): number[] {
     .slice(0, LIMITS.partyRecipes.max);
 }
 
-export function readPlan(query: QuerySignal): PartyPlan {
+export function readPlan(query: URLSearchParams): PartyPlan {
   const collection = Number(query.get('collection'));
   const each = new Map<number, number>();
   for (const pair of (query.get('each') ?? '').split(',')) {

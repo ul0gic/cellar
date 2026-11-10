@@ -52,12 +52,14 @@ let currentKey = '';
 let currentIndex = 0;
 let currentSearch = '';
 let generation = 0;
+let loading = false;
 let keySequence = 0;
 let ignoreNextPop = false;
 let stopRestore: (() => void) | null = null;
 const blockers = new Set<Blocker>();
 const routeListeners = new Set<() => void>();
 const mountListeners = new Set<() => void>();
+const titleListeners = new Set<() => void>();
 const queryListeners = new Set<() => void>();
 const scrollPositions = new Map<string, number>();
 
@@ -169,6 +171,9 @@ function syncQuery(): void {
 }
 
 export function setQuery(patch: QueryPatch, mode: 'replace' | 'push'): void {
+  if (loading) {
+    return;
+  }
   const next = readQuery();
   for (const [key, value] of Object.entries(patch)) {
     next.delete(key);
@@ -372,11 +377,22 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
     return;
   }
   const run = ++generation;
+  loading = true;
   stopRestore?.();
-  const { match, module } = await moduleFor(resolved);
+  let loaded: Awaited<ReturnType<typeof moduleFor>>;
+  try {
+    loaded = await moduleFor(resolved);
+  } catch (error) {
+    if (run === generation) {
+      loading = false;
+    }
+    throw error;
+  }
   if (run !== generation) {
     return;
   }
+  loading = false;
+  const { match, module } = loaded;
   target.replaceChildren();
   current = match;
   batch(() => {
@@ -384,7 +400,7 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
     route.params.value = match.params;
     syncQuery();
   });
-  setScreenTitle(titleOf(match, module));
+  writeTitle(titleOf(match, module));
   notify(mountListeners);
   target.append(module === null ? document.createElement('div') : createScreen(match.def.screen, module, match.params));
   notify(routeListeners);
@@ -406,6 +422,12 @@ function toUrl(to: string): URL {
 }
 
 export const navigate: Navigate = (to: string, opts: NavigateOptions = {}) => {
+  if (!loading) {
+    goTo(to, opts);
+  }
+};
+
+export function goTo(to: string, opts: NavigateOptions = {}): void {
   const url = toUrl(to);
   const sameDocument = url.pathname === location.pathname && url.search === location.search;
   if (sameDocument && url.hash !== location.hash && opts.state === undefined) {
@@ -421,7 +443,7 @@ export const navigate: Navigate = (to: string, opts: NavigateOptions = {}) => {
     writeEntry(url.href, opts.replace === true, opts.state ?? {});
     await render('top');
   })();
-};
+}
 
 async function onPopState(): Promise<void> {
   if (ignoreNextPop) {
@@ -490,7 +512,7 @@ function takeClick(event: MouseEvent): boolean {
     return false;
   }
   event.preventDefault();
-  navigate(path);
+  goTo(path);
   return true;
 }
 
@@ -498,8 +520,16 @@ function onBeforeUnload(event: BeforeUnloadEvent): void {
   event.preventDefault();
 }
 
-export function setScreenTitle(screen: string): void {
+function writeTitle(screen: string): void {
   document.title = text('app.title', { screen });
+}
+
+export function setScreenTitle(screen: string): void {
+  if (loading) {
+    return;
+  }
+  writeTitle(screen);
+  notify(titleListeners);
 }
 
 export function href(path: string): string {
@@ -550,7 +580,7 @@ export const router = {
     });
     configureNavigation({
       href,
-      go: (path) => navigate(path),
+      go: (path) => goTo(path),
       click: (event, options) => options?.external !== true && takeClick(event),
       path: () => appPathOf(location.pathname),
       subscribe(fn) {
@@ -579,6 +609,12 @@ export const router = {
     routeListeners.add(fn);
     return () => {
       routeListeners.delete(fn);
+    };
+  },
+  onTitle(fn: () => void): () => void {
+    titleListeners.add(fn);
+    return () => {
+      titleListeners.delete(fn);
     };
   },
   beforeMount(fn: () => void): () => void {

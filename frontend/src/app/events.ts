@@ -58,3 +58,17 @@ export function eventPick(event: Event): { readonly id: number; readonly title: 
   }
   return { id, title };
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function formValues(event: Event): Record<string, unknown> | null {
+  const values = eventField(event, 'values');
+  return isRecord(values) ? values : null;
+}
+
+export function valueText(values: Record<string, unknown>, name: string): string {
+  const value = values[name];
+  return typeof value === 'string' ? value : '';
+}

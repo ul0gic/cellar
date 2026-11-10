@@ -6,22 +6,33 @@ import {
   LIMITS,
   validateCalculator,
 } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal } from '@lightstart/light/signals';
 import { call } from '../../../app/api.ts';
 import { eventText } from '../../../app/events.ts';
-import { type WatchState, watch } from '../../../app/load.ts';
+import { loadState } from '../../../app/load.ts';
 import { actionFailed } from '../../../app/problems.ts';
-import { resourceFor } from '../../../app/resources.ts';
-import { setScreenTitle } from '../../../app/router.ts';
-import type { ScreenContext } from '../../../app/types.ts';
+import { apiResource } from '../../../app/resources.ts';
+import { navigate, setScreenTitle } from '../../../app/router.ts';
+import type { RouteParams } from '../../../app/types.ts';
 import { confirm } from '../../../design-system/dialogs.ts';
 import { illustration } from '../../../design-system/illustration.ts';
-import { skeleton } from '../../../design-system/skeleton.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/empty-state.ts';
+import '../../../design-system/lc/icon.ts';
+import '../../../design-system/lc/input.ts';
+import '../../../design-system/lc/list-row.ts';
+import { waiting } from '../../../design-system/load-view.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
 import './calc-view.css';
 
-type Mode = { readonly kind: 'use' } | { readonly kind: 'edit'; readonly id: number | null; draft: CalculatorInput };
+type Mode =
+  | { readonly kind: 'use' }
+  | { readonly kind: 'edit'; readonly id: number | null; readonly draft: CalculatorInput };
+
+type Values = Readonly<Record<string, number | null>>;
 
 const NEW_DRAFT = (): CalculatorInput => ({
   name: '',
@@ -49,58 +60,75 @@ function fieldError(message: string): TemplateResult | typeof nothing {
   return message === '' ? nothing : html`<p class="cl-calc-error" role="alert">${message}</p>`;
 }
 
-export function calculatorScreen(ctx: ScreenContext, selectedId: number | null): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-calc-screen';
-  const list = resourceFor('listCalculators', {});
-  let mode: Mode = { kind: 'use' };
-  let values: Record<string, number | null> = {};
-  let shownId: number | null = null;
-  let saving = false;
-  let loadState: WatchState | null = null;
+export class CalculatorScreen extends View {
+  params: RouteParams = {};
+  readonly list = apiResource('listCalculators', []);
+  readonly state = loadState([this.list]);
+  readonly mode = signal<Mode>({ kind: 'use' });
+  readonly values = signal<Values>({});
+  readonly shownId = signal<number | null>(null);
+  readonly saving = signal(false);
 
-  const selected = (): Calculator | null => {
-    const calculators = list.peek()?.calculators ?? [];
-    return calculators.find((calculator) => calculator.id === selectedId) ?? null;
-  };
+  get selectedId(): number | null {
+    return this.params.id === undefined ? null : Number(this.params.id);
+  }
 
-  const edit = (patch: (draft: CalculatorInput) => CalculatorInput): void => {
+  connected(): void {
+    this.classList.add('cl-calc-screen');
+    this.list.bind(this, {});
+    const follow = effect(() => {
+      const calculator = this.selected();
+      if (calculator === null) {
+        return;
+      }
+      setScreenTitle(calculator.name);
+      if (this.shownId.peek() !== calculator.id) {
+        this.shownId.value = calculator.id;
+        this.values.value = Object.fromEntries(calculator.inputs.map((field) => [field.key, field.defaultValue]));
+      }
+    });
+    this.$own(() => follow.dispose());
+  }
+
+  selected(): Calculator | null {
+    const calculators = this.list.value.value?.calculators ?? [];
+    return calculators.find((calculator) => calculator.id === this.selectedId) ?? null;
+  }
+
+  edit(patch: (draft: CalculatorInput) => CalculatorInput): void {
+    const mode = this.mode.peek();
     if (mode.kind === 'edit') {
-      mode.draft = patch(mode.draft);
-      draw();
+      this.mode.value = { ...mode, draft: patch(mode.draft) };
     }
-  };
+  }
 
-  const save = async (): Promise<void> => {
+  async save(): Promise<void> {
+    const mode = this.mode.peek();
     if (mode.kind !== 'edit') {
       return;
     }
     const { id, draft } = mode;
-    saving = true;
-    draw();
+    this.saving.value = true;
     try {
       const saved =
         id === null
           ? await call('createCalculator', { body: draft })
           : await call('replaceCalculator', { params: { id }, body: draft });
-      await list.refresh();
-      mode = { kind: 'use' };
-      saving = false;
+      await this.list.refresh();
+      this.mode.value = { kind: 'use' };
+      this.saving.value = false;
       toast({ title: text('calculators.saved') });
-      if (saved.id === selectedId) {
-        draw();
-      } else {
-        ctx.navigate(`/calculators/${saved.id}`);
+      if (saved.id !== this.selectedId && this.isConnected) {
+        navigate(`/calculators/${saved.id}`);
       }
     } catch (error) {
-      saving = false;
-      draw();
-      actionFailed(error, () => void save());
+      this.saving.value = false;
+      actionFailed(error, () => void this.save());
     }
-  };
+  }
 
-  const remove = async (calculator: Calculator): Promise<void> => {
-    const sure = await confirm({
+  async removeCalculator(calculator: Calculator): Promise<void> {
+    const sure = await confirm(this, {
       title: text('calculators.deleteTitle', { name: calculator.name }),
       message: text('calculators.deleteBody'),
       confirmLabel: text('calculators.delete'),
@@ -111,19 +139,18 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
     }
     try {
       await call('deleteCalculator', { params: { id: calculator.id } });
-      await list.refresh();
+      await this.list.refresh();
       toast({ title: text('toast.deleted') });
-      ctx.navigate('/calculators', { replace: true });
+      if (this.isConnected) {
+        navigate('/calculators', { replace: true });
+      }
     } catch (error) {
-      actionFailed(error, () => void remove(calculator));
+      actionFailed(error, () => void this.removeCalculator(calculator));
     }
-  };
+  }
 
-  const useView = (calculator: Calculator): TemplateResult => {
-    if (shownId !== calculator.id) {
-      shownId = calculator.id;
-      values = Object.fromEntries(calculator.inputs.map((field) => [field.key, field.defaultValue]));
-    }
+  useView(calculator: Calculator): TemplateResult {
+    const values = this.values.value;
     const results = evaluateCalculator(calculator, values);
     const seeded = calculator.provenance === 'catalog';
     return html`<div class="cl-calc-open">
@@ -132,17 +159,15 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
         ${
           seeded
             ? html`<lc-button variant="quiet" @click=${() => {
-                mode = {
+                this.mode.value = {
                   kind: 'edit',
                   id: null,
                   draft: { ...inputOf(calculator), name: text('calculators.copyName', { name: calculator.name }) },
                 };
-                draw();
               }}>${text('calculators.makeCopy')}</lc-button>`
             : calculator.canEdit
               ? html`<lc-button variant="quiet" @click=${() => {
-                  mode = { kind: 'edit', id: calculator.id, draft: inputOf(calculator) };
-                  draw();
+                  this.mode.value = { kind: 'edit', id: calculator.id, draft: inputOf(calculator) };
                 }}>${text('calculators.edit')}</lc-button>`
               : nothing
         }
@@ -159,8 +184,10 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
             @input=${(event: Event) => {
               const raw = eventText(event).trim();
               const parsed = raw === '' ? null : Number(raw);
-              values = { ...values, [field.key]: parsed !== null && Number.isFinite(parsed) ? parsed : null };
-              draw();
+              this.values.value = {
+                ...this.values.peek(),
+                [field.key]: parsed !== null && Number.isFinite(parsed) ? parsed : null,
+              };
             }}
           ></lc-input>`,
         )}
@@ -177,25 +204,25 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
       </dl>
       ${
         calculator.canEdit && !seeded
-          ? html`<lc-button variant="ghost" @click=${() => void remove(calculator)}>
+          ? html`<lc-button variant="ghost" @click=${() => void this.removeCalculator(calculator)}>
               <lc-icon name="trash-2" aria-hidden="true"></lc-icon>${text('calculators.delete')}
             </lc-button>`
           : nothing
       }
     </div>`;
-  };
+  }
 
-  const editView = (state: Extract<Mode, { kind: 'edit' }>): TemplateResult => {
+  editView(state: Extract<Mode, { kind: 'edit' }>): TemplateResult {
     const draft = state.draft;
     const issues = validateCalculator(draft);
     const inputNames = draft.inputs.map((field) => field.key).join(` ${text('calculators.and')} `);
-    const blocked = issues.length > 0 || draft.name.trim() === '' || saving;
+    const blocked = issues.length > 0 || draft.name.trim() === '' || this.saving.value;
     return html`<form
       class="cl-calc-open"
       @submit=${(event: SubmitEvent) => {
         event.preventDefault();
         if (!blocked) {
-          void save();
+          void this.save();
         }
       }}
     >
@@ -203,7 +230,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
         label=${text('calculators.name')}
         maxlength=${LIMITS.name.max}
         value=${draft.name}
-        @input=${(event: Event) => edit((current) => ({ ...current, name: eventText(event) }))}
+        @input=${(event: Event) => this.edit((current) => ({ ...current, name: eventText(event) }))}
       ></lc-input>
       <fieldset class="cl-calc-group">
         <legend>${text('calculators.inputs')}</legend>
@@ -213,7 +240,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               label=${text('calculators.inputName', { position: index + 1 })}
               value=${field.key}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   inputs: current.inputs.map((item, at) => (at === index ? { ...item, key: eventText(event) } : item)),
                 }))}
@@ -222,7 +249,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               label=${text('calculators.inputTitle', { position: index + 1 })}
               value=${field.label}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   inputs: current.inputs.map((item, at) =>
                     at === index ? { ...item, label: eventText(event) } : item,
@@ -234,7 +261,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               type="number"
               value=${String(field.defaultValue)}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   inputs: current.inputs.map((item, at) =>
                     at === index ? { ...item, defaultValue: Number(eventText(event)) || 0 } : item,
@@ -246,7 +273,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               maxlength=${LIMITS.calculatorSuffix.max}
               value=${field.suffix}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   inputs: current.inputs.map((item, at) =>
                     at === index ? { ...item, suffix: eventText(event) } : item,
@@ -257,14 +284,14 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
             <lc-button
               variant="ghost"
               ?disabled=${draft.inputs.length === 1}
-              @click=${() => edit((current) => ({ ...current, inputs: current.inputs.filter((_, at) => at !== index) }))}
+              @click=${() => this.edit((current) => ({ ...current, inputs: current.inputs.filter((_, at) => at !== index) }))}
             >${text('calculators.removeInput', { position: index + 1 })}</lc-button>
           </div>`,
         )}
         <lc-button
           ?disabled=${draft.inputs.length >= LIMITS.calculatorInputs.max}
           @click=${() =>
-            edit((current) => ({
+            this.edit((current) => ({
               ...current,
               inputs: [
                 ...current.inputs,
@@ -282,7 +309,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               label=${text('calculators.resultLabel', { position: index + 1 })}
               value=${field.label}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   outputs: current.outputs.map((item, at) =>
                     at === index ? { ...item, label: eventText(event) } : item,
@@ -293,7 +320,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               label=${text('calculators.resultFormula', { position: index + 1 })}
               value=${field.expression}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   outputs: current.outputs.map((item, at) =>
                     at === index ? { ...item, expression: eventText(event) } : item,
@@ -305,7 +332,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
               maxlength=${LIMITS.calculatorSuffix.max}
               value=${field.suffix}
               @input=${(event: Event) =>
-                edit((current) => ({
+                this.edit((current) => ({
                   ...current,
                   outputs: current.outputs.map((item, at) =>
                     at === index ? { ...item, suffix: eventText(event) } : item,
@@ -316,14 +343,14 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
             <lc-button
               variant="ghost"
               ?disabled=${draft.outputs.length === 1}
-              @click=${() => edit((current) => ({ ...current, outputs: current.outputs.filter((_, at) => at !== index) }))}
+              @click=${() => this.edit((current) => ({ ...current, outputs: current.outputs.filter((_, at) => at !== index) }))}
             >${text('calculators.removeResult', { position: index + 1 })}</lc-button>
           </div>`,
         )}
         <lc-button
           ?disabled=${draft.outputs.length >= LIMITS.calculatorOutputs.max}
           @click=${() =>
-            edit((current) => ({
+            this.edit((current) => ({
               ...current,
               outputs: [
                 ...current.outputs,
@@ -334,83 +361,56 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
       </fieldset>
       <div class="cl-calc-footer">
         <lc-button variant="quiet" @click=${() => {
-          mode = { kind: 'use' };
-          draw();
+          this.mode.value = { kind: 'use' };
         }}>${text('action.cancel')}</lc-button>
         <lc-button variant="primary" type="submit" ?disabled=${blocked}>${text('calculators.save')}</lc-button>
       </div>
     </form>`;
-  };
+  }
 
-  const panel = (calculators: readonly Calculator[]): TemplateResult => html`<nav
-    class="cl-calc-list"
-    aria-label=${text('nav.calculators')}
-  >
-    ${calculators.map(
-      (calculator) => html`<lc-list-row
-        href=${`/calculators/${calculator.id}`}
-        label=${calculator.name}
-        hint=${calculator.provenance === 'catalog' ? text('calculators.fromCatalog') : ''}
-        ?selected=${calculator.id === selectedId}
-        chevron
-      ></lc-list-row>`,
-    )}
-  </nav>`;
+  panel(calculators: readonly Calculator[]): TemplateResult {
+    return html`<nav class="cl-calc-list" aria-label=${text('nav.calculators')}>
+      ${calculators.map(
+        (calculator) => html`<lc-list-row
+          href=${`/calculators/${calculator.id}`}
+          label=${calculator.name}
+          hint=${calculator.provenance === 'catalog' ? text('calculators.fromCatalog') : ''}
+          ?selected=${calculator.id === this.selectedId}
+          chevron
+        ></lc-list-row>`,
+      )}
+    </nav>`;
+  }
 
-  const draw = (): void => {
-    const data = list.peek();
-    const problem = loadState?.error(list) ?? null;
+  render() {
+    const data = this.list.value.value;
     if (data === undefined) {
-      if (problem !== null) {
-        render(
-          html`<lc-empty-state title=${text('loadFailed.title', { screen: text('nav.calculators') })} description=${text('loadFailed.body')}>
-            ${illustration('empty-lost')}
-            <lc-button variant="primary" @click=${() => loadState?.retry()}>${text('loadFailed.retry')}</lc-button>
-          </lc-empty-state>`,
-          element,
-        );
-      } else if (loadState?.slow === true && element.querySelector('.cl-skeleton') === null) {
-        element.replaceChildren(skeleton('rows', text('nav.calculators')));
-      }
-      return;
+      return waiting(this.state, text('nav.calculators'), 'rows');
     }
-    element.querySelector('.cl-skeleton')?.remove();
-    const calculator = selected();
-    if (calculator !== null) {
-      setScreenTitle(calculator.name);
-    }
+    const mode = this.mode.value;
+    const calculator = this.selected();
     const open =
       mode.kind === 'edit'
-        ? editView(mode)
+        ? this.editView(mode)
         : calculator !== null
-          ? useView(calculator)
-          : selectedId !== null
+          ? this.useView(calculator)
+          : this.selectedId !== null
             ? html`<lc-empty-state title=${text('calculators.notFound')} description=${text('calculators.notFoundBody')}>
                 ${illustration('empty-lost')}
               </lc-empty-state>`
             : nothing;
-    render(
-      html`
-        <header class="cl-calc-page-head">
-          <h1 class="cl-calc-title">${text('nav.calculators')}</h1>
-          <lc-button variant="primary" @click=${() => {
-            mode = { kind: 'edit', id: null, draft: NEW_DRAFT() };
-            draw();
-          }}>
-            <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('calculators.new')}
-          </lc-button>
-        </header>
-        <div class=${selectedId === null && mode.kind === 'use' ? 'cl-calc-grid is-list' : 'cl-calc-grid'}>
-          ${panel(data.calculators)} ${open}
-        </div>
-      `,
-      element,
-    );
-  };
-
-  watch(element, [list], (state) => {
-    loadState = state;
-    draw();
-  });
-  return element;
+    return html`
+      <header class="cl-calc-page-head">
+        <h1 class="cl-calc-title">${text('nav.calculators')}</h1>
+        <lc-button variant="primary" @click=${() => {
+          this.mode.value = { kind: 'edit', id: null, draft: NEW_DRAFT() };
+        }}>
+          <lc-icon name="plus" aria-hidden="true"></lc-icon>${text('calculators.new')}
+        </lc-button>
+      </header>
+      <div class=${this.selectedId === null && mode.kind === 'use' ? 'cl-calc-grid is-list' : 'cl-calc-grid'}>
+        ${this.panel(data.calculators)} ${open}
+      </div>
+    `;
+  }
 }

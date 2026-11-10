@@ -1,210 +1,235 @@
 import { type Job, LIMITS } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import type { FormField } from '@lightstart/components/types.js';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
-import { eventText } from '../../app/events.ts';
+import { session } from '../../app/controllers/session.ts';
+import { formValues, valueText } from '../../app/events.ts';
 import { problemText } from '../../app/problems.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { navigate } from '../../app/router.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/form.ts';
 import { armFirstArrival } from '../../design-system/motion.ts';
 import { text } from '../../text/index.ts';
-import { screen as notFound } from '../launch/not-found.ts';
+import '../launch/not-found.ts';
+import { introField } from '../login/parts/card-form.ts';
 import { cardForm, stepDots } from '../login/parts/stage.ts';
 import { switchField } from '../settings/parts/fields.ts';
 import { followJob, jobProgress } from '../settings/parts/job.ts';
 
 type Step = 'checking' | 'account' | 'options' | 'loading' | 'failed' | 'done';
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-setup';
-  let step: Step = 'checking';
-  let name = '';
-  let password = '';
-  let passwordError = '';
-  let nameError = '';
-  let requireLogin = true;
-  let loadCatalog = true;
-  let busy = false;
-  let serverError = '';
-  let job: Job | null = null;
-  let failure = '';
+export const tag = 'cl-screen-setup-setup';
 
-  const enterHome = (): void => {
-    armFirstArrival();
-    ctx.navigate('/', { replace: true });
-  };
+const NOT_FOUND_PARAMS = { path: '/setup' };
 
-  const account = (): TemplateResult => html`<form
-      novalidate
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
-        nameError = name.trim().length === 0 ? text('setup.nameMissing') : '';
-        passwordError = password.length < LIMITS.password.min ? text('setup.weak') : '';
-        if (nameError === '' && passwordError === '') {
-          step = 'options';
-        }
-        draw();
-      }}
-    >
-      <h1>${text('setup.account.title')}</h1>
-      <p class="cl-card-lead">${text('setup.account.lead')}</p>
-      <div class="cl-form-grid">
-        <lc-input
-          label=${text('setup.name')}
-          name="name"
-          autocomplete="username"
-          .value=${name}
-          error-message=${nameError}
-          @input=${(event: Event) => {
-            name = eventText(event);
-          }}
-        ></lc-input>
-        <div class="cl-field">
-          <lc-input
-            label=${text('setup.password')}
-            name="password"
-            type="password"
-            autocomplete="new-password"
-            .value=${password}
-            error-message=${passwordError}
-            hint=${text('setup.passwordHint')}
-            @input=${(event: Event) => {
-              password = eventText(event);
-            }}
-          ></lc-input>
-        </div>
-      </div>
-      <lc-button class="cl-card-submit" variant="primary" type="submit" w-full>${text('setup.continue')}</lc-button>
-      ${stepDots(1, 2)}
-    </form>`;
+const ACCOUNT_FIELDS: FormField[] = [
+  introField(text('setup.account.title'), text('setup.account.lead')),
+  { name: 'name', type: 'text', label: text('setup.name') },
+  { name: 'password', type: 'password', label: text('setup.password'), help: text('setup.passwordHint') },
+];
 
-  const submit = async (): Promise<void> => {
-    busy = true;
-    serverError = '';
-    draw();
+class SetupScreen extends View {
+  readonly step = signal<Step>('checking');
+  readonly values = signal<Record<string, unknown>>({ name: '', password: '' });
+  readonly accountErrors = signal<Record<string, string>>({});
+  readonly requireLogin = signal(true);
+  readonly loadCatalog = signal(true);
+  readonly busy = signal(false);
+  readonly serverError = signal('');
+  readonly job = signal<Job | null>(null);
+  readonly failure = signal('');
+  private checked = false;
+
+  connected(): void {
+    this.classList.add('cl-setup');
+    if (!this.checked) {
+      this.checked = true;
+      void this.check();
+    }
+  }
+
+  private async check(): Promise<void> {
     try {
-      const result = await call('runSetup', { body: { ownerName: name.trim(), password, requireLogin, loadCatalog } });
-      await ctx.person.refresh();
+      await call('getSession', {});
+      this.step.value = 'done';
+    } catch (error) {
+      if (!(error instanceof ApiError)) {
+        throw error;
+      }
+      if (error.code !== 'network_error') {
+        this.step.value = error.code === 'setup_required' ? 'account' : 'done';
+      }
+    }
+  }
+
+  private enterHome(): void {
+    if (!this.isConnected) {
+      return;
+    }
+    armFirstArrival();
+    navigate('/', { replace: true });
+  }
+
+  private continueToOptions(): void {
+    const values = this.values.peek();
+    const missing: Record<string, string> = {};
+    if (valueText(values, 'name').trim().length === 0) {
+      missing.name = text('setup.nameMissing');
+    }
+    if (valueText(values, 'password').length < LIMITS.password.min) {
+      missing.password = text('setup.weak');
+    }
+    this.accountErrors.value = missing;
+    if (Object.keys(missing).length === 0) {
+      this.step.value = 'options';
+    }
+  }
+
+  private async submit(): Promise<void> {
+    if (this.busy.peek()) {
+      return;
+    }
+    this.busy.value = true;
+    this.serverError.value = '';
+    const values = this.values.peek();
+    try {
+      const result = await call('runSetup', {
+        body: {
+          ownerName: valueText(values, 'name').trim(),
+          password: valueText(values, 'password'),
+          requireLogin: this.requireLogin.peek(),
+          loadCatalog: this.loadCatalog.peek(),
+        },
+      });
+      await session.refresh();
       if (result.catalogJob === null) {
-        enterHome();
+        this.enterHome();
         return;
       }
-      step = 'loading';
+      this.step.value = 'loading';
       const finished = await followJob(
         result.catalogJob,
         (next) => {
-          job = next;
-          draw();
+          this.job.value = next;
         },
-        () => element.isConnected,
+        () => this.isConnected,
       );
       if (finished === null) {
         return;
       }
       if (finished.state === 'succeeded') {
-        await ctx.person.refresh();
-        enterHome();
+        await session.refresh();
+        this.enterHome();
         return;
       }
-      failure = finished.error?.detail ?? text('setup.failedUnknown');
-      step = 'failed';
+      this.failure.value = finished.error?.detail ?? text('setup.failedUnknown');
+      this.step.value = 'failed';
     } catch (error) {
       if (!(error instanceof ApiError)) {
         throw error;
       }
       if (error.code === 'catalog_builtin_damaged') {
-        await ctx.person.refresh();
-        failure = error.detail;
-        step = 'failed';
+        await session.refresh();
+        this.failure.value = error.detail;
+        this.step.value = 'failed';
       } else if (error.code === 'validation_failed') {
-        nameError = error.fields.find((field) => field.path === 'ownerName')?.message ?? '';
-        passwordError = error.fields.find((field) => field.path === 'password')?.message ?? '';
-        step = 'account';
+        this.accountErrors.value = {
+          name: error.fields.find((field) => field.path === 'ownerName')?.message ?? '',
+          password: error.fields.find((field) => field.path === 'password')?.message ?? '',
+        };
+        this.step.value = 'account';
       } else {
-        serverError = problemText(error);
+        this.serverError.value = problemText(error);
       }
     } finally {
-      busy = false;
+      this.busy.value = false;
     }
-    draw();
-  };
+  }
 
-  const options = (): TemplateResult => html`<form
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
-        if (!busy) {
-          void submit();
+  private account(): TemplateResult {
+    return html`<lc-form
+      class="cl-card-lcform cl-card-lcform-fields"
+      layout="stacked"
+      .fields=${ACCOUNT_FIELDS}
+      .data=${this.values.value}
+      .errors=${this.accountErrors.value}
+      @field-change=${(event: Event) => {
+        const values = formValues(event);
+        if (values !== null) {
+          this.values.value = values;
         }
       }}
+      @form-submit=${() => this.continueToOptions()}
     >
+      <lc-button class="cl-card-submit" variant="primary" type="submit" w-full>${text('setup.continue')}</lc-button>
+      ${stepDots(1, 2)}
+    </lc-form>`;
+  }
+
+  private options(): TemplateResult {
+    return html`<lc-form class="cl-card-lcform cl-card-lcform-flow" layout="stacked" @form-submit=${() => void this.submit()}>
       <h1>${text('setup.options.title')}</h1>
       <p class="cl-card-lead">${text('setup.options.lead')}</p>
       ${
-        serverError === ''
+        this.serverError.value === ''
           ? nothing
           : html`<lc-alert class="cl-card-banner" variant="error" title=${text('setup.ownerFailed')}
-              >${text('setup.ownerFailedBody', { reason: serverError })}</lc-alert
+              >${text('setup.ownerFailedBody', { reason: this.serverError.value })}</lc-alert
             >`
       }
-      ${switchField(text('setup.requireLogin'), text('setup.requireLoginBody'), requireLogin, (checked) => {
-        requireLogin = checked;
+      ${switchField(text('setup.requireLogin'), text('setup.requireLoginBody'), this.requireLogin.value, (checked) => {
+        this.requireLogin.value = checked;
       })}
-      ${switchField(text('setup.loadCatalog'), text('setup.loadCatalogBody'), loadCatalog, (checked) => {
-        loadCatalog = checked;
+      ${switchField(text('setup.loadCatalog'), text('setup.loadCatalogBody'), this.loadCatalog.value, (checked) => {
+        this.loadCatalog.value = checked;
       })}
-      <lc-button class="cl-card-submit" variant="primary" type="submit" w-full ?disabled=${busy}
+      <lc-button class="cl-card-submit" variant="primary" type="submit" w-full ?disabled=${this.busy.value}
         >${text('setup.open')}</lc-button
       >
       ${stepDots(2, 2)}
-    </form>`;
+    </lc-form>`;
+  }
 
-  const loading = (): TemplateResult => html`<h1>${text('setup.loading.title')}</h1>
-    <p class="cl-card-lead">${text('setup.loading.lead')}</p>
-    ${job === null ? nothing : jobProgress(job, text('setup.loading.label'))}`;
+  private loading(): TemplateResult {
+    const job = this.job.value;
+    return html`<h1>${text('setup.loading.title')}</h1>
+      <p class="cl-card-lead">${text('setup.loading.lead')}</p>
+      ${job === null ? nothing : jobProgress(job, text('setup.loading.label'))}`;
+  }
 
-  const failed = (): TemplateResult => html`<h1>${text('setup.failed.title')}</h1>
-    <lc-alert class="cl-card-banner" variant="error" title=${text('setup.failed.banner')}
-      >${failure}</lc-alert
-    >
-    <lc-button variant="primary" w-full @click=${enterHome}>${text('setup.failed.continue')}</lc-button>`;
+  private failed(): TemplateResult {
+    return html`<h1>${text('setup.failed.title')}</h1>
+      <lc-alert class="cl-card-banner" variant="error" title=${text('setup.failed.banner')}
+        >${this.failure.value}</lc-alert
+      >
+      <lc-button variant="primary" w-full @click=${() => this.enterHome()}>${text('setup.failed.continue')}</lc-button>`;
+  }
 
-  const draw = (): void => {
-    switch (step) {
+  render() {
+    switch (this.step.value) {
       case 'checking':
+        return nothing;
       case 'done':
-        return;
+        return html`<cl-screen-launch-not-found .params=${NOT_FOUND_PARAMS}></cl-screen-launch-not-found>`;
       case 'account':
-        render(cardForm(account()), element);
-        return;
+        return cardForm(this.account());
       case 'options':
-        render(cardForm(options()), element);
-        return;
+        return cardForm(this.options());
       case 'loading':
-        render(cardForm(loading()), element);
-        return;
+        return cardForm(this.loading());
       case 'failed':
-        render(cardForm(failed()), element);
-        return;
+        return cardForm(this.failed());
     }
-  };
+  }
+}
 
-  void (async () => {
-    try {
-      await call('getSession', {});
-      step = 'done';
-    } catch (error) {
-      if (!(error instanceof ApiError)) {
-        throw error;
-      }
-      if (error.code === 'network_error') {
-        return;
-      }
-      step = error.code === 'setup_required' ? 'account' : 'done';
-    }
-    if (step === 'done') {
-      element.replaceChildren(notFound({ ...ctx, params: { path: '/setup' } }));
-      return;
-    }
-    draw();
-  })();
-  return element;
+View.register(tag, SetupScreen);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: SetupScreen;
+  }
 }

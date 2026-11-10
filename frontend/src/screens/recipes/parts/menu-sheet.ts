@@ -1,12 +1,21 @@
 import { LIMITS, type Menu, type MenuInput, type MenuItem, type MenuItemInput, type Recipe } from '@cellar/contract';
 import { html, nothing } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { call } from '../../../app/api.ts';
 import { eventChecked, eventText } from '../../../app/events.ts';
 import { actionFailed } from '../../../app/problems.ts';
-import { invalidate } from '../../../app/resources.ts';
+import { dataChanged } from '../../../app/resources.ts';
 import { today } from '../../../app/today.ts';
+import type { OverlayHost } from '../../../app/types.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
+import '../../../design-system/lc/alert.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/input.ts';
+import '../../../design-system/lc/radio.ts';
+import '../../../design-system/lc/radio-group.ts';
+import '../../../design-system/lc/select.ts';
+import '../../../design-system/lc/switch.ts';
 import { openSheet } from './sheet.ts';
 
 const NEW_MENU = 'new';
@@ -36,71 +45,79 @@ function menuInput(menu: Menu): MenuInput {
   };
 }
 
-export async function openMenuSheet(recipe: Recipe): Promise<void> {
+export async function openMenuSheet(host: OverlayHost, recipe: Recipe): Promise<void> {
   const page = await call('listMenus', { query: { pageSize: MENU_PAGE } });
+  if (!host.isConnected) {
+    return;
+  }
   const menus = page.items;
-  let choice = menus[0] === undefined ? NEW_MENU : String(menus[0].id);
-  let menu: Menu | null = null;
-  let sectionIndex = 0;
-  let hostNote = '';
-  let hide = false;
-  let newName = '';
-  let saving = false;
+  const choice = signal(menus[0] === undefined ? NEW_MENU : String(menus[0].id));
+  const menu = signal<Menu | null>(null);
+  const sectionIndex = signal(0);
+  const hostNote = signal('');
+  const hide = signal(false);
+  const newName = signal('');
+  const saving = signal(false);
   const missing = recipe.lines.filter((line) => line.status === 'missing' && !line.optional);
 
   const load = async (): Promise<void> => {
-    menu = choice === NEW_MENU ? null : await call('getMenu', { params: { id: Number(choice) } });
-    sectionIndex = 0;
-    sheet.redraw();
+    menu.value = choice.peek() === NEW_MENU ? null : await call('getMenu', { params: { id: Number(choice.peek()) } });
+    sectionIndex.value = 0;
   };
 
   const target = (): string =>
-    choice === NEW_MENU ? newName.trim() : (menus.find((item) => String(item.id) === choice)?.name ?? '');
+    choice.value === NEW_MENU
+      ? newName.value.trim()
+      : (menus.find((item) => String(item.id) === choice.value)?.name ?? '');
 
   const save = async (): Promise<void> => {
-    const item: MenuItemInput = { kind: 'recipe', recipeId: recipe.id, hostNote, hideWhenUnavailable: hide };
-    saving = true;
-    sheet.redraw();
+    const item: MenuItemInput = {
+      kind: 'recipe',
+      recipeId: recipe.id,
+      hostNote: hostNote.peek(),
+      hideWhenUnavailable: hide.peek(),
+    };
+    const chosen = menu.peek();
+    saving.value = true;
     try {
-      if (menu === null) {
+      if (chosen === null) {
         await call('createMenu', {
           body: {
-            name: newName.trim(),
+            name: newName.peek().trim(),
             date: today(),
             sections: [{ name: text('recipes.menuSection'), items: [item] }],
           },
         });
       } else {
-        const input = menuInput(menu);
+        const input = menuInput(chosen);
         const sections =
           input.sections.length === 0 ? [{ name: text('recipes.menuSection'), items: [] }] : input.sections;
         await call('replaceMenu', {
-          params: { id: menu.id },
+          params: { id: chosen.id },
           body: {
             ...input,
             sections: sections.map((section, index) =>
-              index === sectionIndex ? { ...section, items: [...section.items, item] } : section,
+              index === sectionIndex.peek() ? { ...section, items: [...section.items, item] } : section,
             ),
           },
         });
       }
-      invalidate('menus');
+      dataChanged('menus');
       const name = target();
       sheet.close();
       toast({ title: text('recipes.addedToMenu', { menu: name }) });
     } catch (error) {
-      saving = false;
-      sheet.redraw();
+      saving.value = false;
       actionFailed(error, () => void save());
     }
   };
 
-  const sheet = openSheet({
+  const sheet = openSheet(host, {
     heading: () => text('recipes.menuHeading', { name: recipe.name }),
     body: () => html`
       <lc-select
         label=${text('recipes.menuField')}
-        value=${choice}
+        value=${choice.value}
         .options=${[
           ...menus.map((item) => ({
             value: String(item.id),
@@ -109,30 +126,29 @@ export async function openMenuSheet(recipe: Recipe): Promise<void> {
           { value: NEW_MENU, label: text('recipes.newMenu') },
         ]}
         @change=${(event: Event) => {
-          choice = eventText(event) || NEW_MENU;
+          choice.value = eventText(event) || NEW_MENU;
           void load().catch((error: unknown) => actionFailed(error, () => void load()));
         }}
       ></lc-select>
       ${
-        choice === NEW_MENU
+        choice.value === NEW_MENU
           ? html`<lc-input
               label=${text('recipes.newMenuName')}
               maxlength=${LIMITS.shortName.max}
-              value=${newName}
+              value=${newName.value}
               @input=${(event: Event) => {
-                newName = eventText(event);
-                sheet.redraw();
+                newName.value = eventText(event);
               }}
             ></lc-input>`
-          : menu !== null && menu.sections.length > 0
+          : menu.value !== null && menu.value.sections.length > 0
             ? html`<lc-radio-group
                 label=${text('recipes.menuSectionField')}
-                value=${String(sectionIndex)}
+                value=${String(sectionIndex.value)}
                 @change=${(event: Event) => {
-                  sectionIndex = Number(eventText(event));
+                  sectionIndex.value = Number(eventText(event));
                 }}
               >
-                ${menu.sections.map(
+                ${menu.value.sections.map(
                   (section, index) => html`<lc-radio
                     value=${String(index)}
                     label=${text('recipes.menuSectionCount', { name: section.name, count: section.items.length })}
@@ -145,18 +161,17 @@ export async function openMenuSheet(recipe: Recipe): Promise<void> {
         label=${text('recipes.hostNote')}
         hint=${text('recipes.hostNoteHint')}
         maxlength=${LIMITS.hostNote.max}
-        value=${hostNote}
+        value=${hostNote.value}
         @input=${(event: Event) => {
-          hostNote = eventText(event);
+          hostNote.value = eventText(event);
         }}
       ></lc-input>
       <lc-switch
         label=${text('recipes.hideWhenMissing')}
         hint=${text('recipes.hideWhenMissingHint')}
-        ?checked=${hide}
+        ?checked=${hide.value}
         @change=${(event: Event) => {
-          hide = eventChecked(event);
-          sheet.redraw();
+          hide.value = eventChecked(event);
         }}
       ></lc-switch>
       ${
@@ -171,12 +186,12 @@ export async function openMenuSheet(recipe: Recipe): Promise<void> {
       <lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
       <lc-button
         variant="primary"
-        ?disabled=${saving || target() === ''}
+        ?disabled=${saving.value || target() === ''}
         @click=${() => void save()}
       >${target() === '' ? text('recipes.addToMenu') : text('recipes.addToNamed', { menu: target() })}</lc-button>
     `,
   });
-  if (choice !== NEW_MENU) {
+  if (choice.peek() !== NEW_MENU) {
     await load();
   }
 }

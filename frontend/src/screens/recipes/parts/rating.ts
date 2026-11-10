@@ -2,8 +2,9 @@ import type { HouseholdRating, RatingState, RatingValue } from '@cellar/contract
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
 import { actionFailed } from '../../../app/problems.ts';
-import { invalidate } from '../../../app/resources.ts';
+import { dataChanged } from '../../../app/resources.ts';
 import { text } from '../../../text/index.ts';
+import '../../../design-system/lc/rating.ts';
 
 const HINT_KEY = 'cellar.ratingHintSeen';
 const RATING_VALUES: readonly RatingValue[] = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
@@ -53,7 +54,7 @@ async function rate(opts: RatingControl, picked: number): Promise<void> {
     if (clearing) {
       markHintSeen();
     }
-    invalidate('recipes', 'stats');
+    dataChanged('recipes', 'stats');
     opts.onRated(state.mine?.value ?? 0, state);
   } catch (error) {
     actionFailed(error, () => void rate(opts, picked));

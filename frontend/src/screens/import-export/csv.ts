@@ -1,9 +1,20 @@
 import { type CsvImportReport, type CsvKind, type DuplicateRule, LIMITS } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect, signal } from '@lightstart/light/signals';
 import { ApiError, call } from '../../app/api.ts';
 import { droppedFile, eventField } from '../../app/events.ts';
-import { invalidate } from '../../app/resources.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { dataChanged } from '../../app/resources.ts';
+import { navigate } from '../../app/router.ts';
+import '../../design-system/cl-figure.ts';
+import '../../design-system/lc/alert.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/file-upload.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/progress-bar.ts';
+import '../../design-system/lc/segmented.ts';
+import '../../design-system/lc/table.ts';
+import '../../design-system/lc/wizard.ts';
 import { text } from '../../text/index.ts';
 import { download } from './files.ts';
 
@@ -51,121 +62,174 @@ function saveLabel(kind: CsvKind, count: number): string {
   return count === 1 ? text('import-export.saveIngredient') : text('import-export.saveIngredients', { count });
 }
 
-export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('div');
-  element.className = 'cl-import-csv';
+function tally(checked: CsvImportReport): TemplateResult {
+  const errors = new Set(checked.errors.map((error) => error.row)).size;
+  const cell = (count: number, label: string, bad = false): TemplateResult =>
+    html`<div class=${bad && count > 0 ? 'cl-import-tally-cell is-bad' : 'cl-import-tally-cell'}>
+      <b>${count}</b><span>${label}</span>
+    </div>`;
+  return html`<div class="cl-import-tally" role="group" aria-label=${text('import-export.tally')}>
+    ${cell(checked.creates, text('import-export.tally.new'))}
+    ${cell(checked.updates, text('import-export.tally.update'))}
+    ${cell(checked.skips, text('import-export.tally.skip'))}
+    ${cell(errors, text('import-export.tally.errors'), true)}
+  </div>`;
+}
 
-  const duplicateLabel =
-    kind === 'bottles' ? text('import-export.duplicateBottles') : text('import-export.duplicateIngredients');
-  let step: Step = 1;
-  let drawnStep: Step = 1;
-  let template: Template | null = null;
-  let templateFailed = false;
-  let file: File | null = null;
-  let report: CsvImportReport | null = null;
-  let duplicate: DuplicateRule = 'skip';
-  let busy: 'checking' | 'saving' | null = null;
-  let uploadError: string | null = null;
-  let saveError: string | null = null;
-  let done: Done | null = null;
+function uploadProblem(error: ApiError): string {
+  if (error.code === 'unsupported_media_type') {
+    return text('import-export.notCsv');
+  }
+  if (error.code === 'payload_too_large') {
+    return text('import-export.tooLarge');
+  }
+  return error.detail;
+}
 
-  const send = (chosen: File, mode: 'dry_run' | 'commit'): Promise<CsvImportReport> => {
+const bottlesTag = 'cl-import-export-csv-bottles';
+const ingredientsTag = 'cl-import-export-csv-ingredients';
+
+abstract class CsvPanel extends View {
+  abstract readonly kind: CsvKind;
+  readonly step = signal<Step>(1);
+  readonly template = signal<Template | null>(null);
+  readonly templateFailed = signal(false);
+  readonly file = signal<File | null>(null);
+  readonly report = signal<CsvImportReport | null>(null);
+  readonly duplicate = signal<DuplicateRule>('skip');
+  readonly busy = signal<'checking' | 'saving' | null>(null);
+  readonly uploadError = signal<string | null>(null);
+  readonly saveError = signal<string | null>(null);
+  readonly done = signal<Done | null>(null);
+
+  connected(): void {
+    this.classList.add('cl-import-csv');
+    let drawn = this.step.peek();
+    let frame: number | null = null;
+    const follow = effect(() => {
+      const step = this.step.value;
+      if (step === drawn) {
+        return;
+      }
+      drawn = step;
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          const shown = this.querySelector<HTMLElement>(`[slot="step-${this.step.peek()}"]`);
+          (
+            shown?.querySelector<HTMLElement>('.cl-import-heading') ?? shown?.querySelector<HTMLElement>('button')
+          )?.focus();
+        });
+      });
+    });
+    this.$own(() => {
+      follow.dispose();
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+    });
+  }
+
+  firstUpdated(): void {
+    readTemplate(this.kind)
+      .then((loaded) => {
+        this.template.value = loaded;
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof ApiError)) {
+          throw error;
+        }
+        this.templateFailed.value = true;
+      });
+  }
+
+  send(chosen: File, mode: 'dry_run' | 'commit'): Promise<CsvImportReport> {
     const body = new FormData();
     body.append('file', new File([chosen], chosen.name, { type: 'text/csv' }));
-    body.append('kind', kind);
+    body.append('kind', this.kind);
     body.append('mode', mode);
-    body.append('duplicate', duplicate);
+    body.append('duplicate', this.duplicate.peek());
     return call('importCsv', { body });
-  };
+  }
 
-  const uploadProblem = (error: ApiError): string => {
-    if (error.code === 'unsupported_media_type') {
-      return text('import-export.notCsv');
-    }
-    if (error.code === 'payload_too_large') {
-      return text('import-export.tooLarge');
-    }
-    return error.detail;
-  };
-
-  const check = async (chosen: File): Promise<void> => {
-    file = chosen;
-    busy = 'checking';
-    uploadError = null;
-    saveError = null;
-    draw();
+  async check(chosen: File): Promise<void> {
+    this.file.value = chosen;
+    this.busy.value = 'checking';
+    this.uploadError.value = null;
+    this.saveError.value = null;
     try {
-      report = await send(chosen, 'dry_run');
-      step = 3;
+      this.report.value = await this.send(chosen, 'dry_run');
+      this.step.value = 3;
     } catch (error) {
       if (!(error instanceof ApiError)) {
         throw error;
       }
-      uploadError = uploadProblem(error);
-      step = 2;
+      this.uploadError.value = uploadProblem(error);
+      this.step.value = 2;
     } finally {
-      busy = null;
-      draw();
+      this.busy.value = null;
     }
-  };
+  }
 
-  const commit = async (): Promise<void> => {
-    if (file === null) {
+  async commit(): Promise<void> {
+    const chosen = this.file.peek();
+    if (chosen === null) {
       return;
     }
-    busy = 'saving';
-    saveError = null;
-    draw();
+    this.busy.value = 'saving';
+    this.saveError.value = null;
     try {
-      const before = kind === 'bottles' ? await canMakeCount() : null;
-      const saved = await send(file, 'commit');
-      invalidate('shelf', 'ingredients', 'recipes', 'stats');
+      const before = this.kind === 'bottles' ? await canMakeCount() : null;
+      const saved = await this.send(chosen, 'commit');
+      dataChanged('shelf', 'ingredients', 'recipes', 'stats');
       const after = before === null ? null : await canMakeCount();
-      done = { report: saved, more: before === null || after === null ? null : after - before };
-      step = 4;
+      this.done.value = { report: saved, more: before === null || after === null ? null : after - before };
+      this.step.value = 4;
     } catch (error) {
       if (!(error instanceof ApiError)) {
         throw error;
       }
       const returned = error.problem?.report;
       if (error.code === 'import_has_errors' && returned !== undefined && 'kind' in returned) {
-        report = returned;
+        this.report.value = returned;
       } else {
-        saveError = error.detail;
+        this.saveError.value = error.detail;
       }
     } finally {
-      busy = null;
-      draw();
+      this.busy.value = null;
     }
-  };
+  }
 
-  const restart = (): void => {
-    step = 2;
-    file = null;
-    report = null;
-    done = null;
-    uploadError = null;
-    saveError = null;
-    draw();
-  };
+  restart(): void {
+    this.step.value = 2;
+    this.file.value = null;
+    this.report.value = null;
+    this.done.value = null;
+    this.uploadError.value = null;
+    this.saveError.value = null;
+  }
 
-  const templateStep = (): TemplateResult => {
-    const name = `${kind}-template.csv`;
+  templateStep(): TemplateResult {
+    const name = `${this.kind}-template.csv`;
+    const template = this.template.value;
     return html`
       <h2 class="cl-import-heading" tabindex="-1">${text('import-export.templateTitle')}</h2>
       <p class="cl-import-text">
-        ${kind === 'bottles' ? text('import-export.templateBottles') : text('import-export.templateIngredients')}
+        ${this.kind === 'bottles' ? text('import-export.templateBottles') : text('import-export.templateIngredients')}
       </p>
       ${
         template === null
-          ? templateFailed
+          ? this.templateFailed.value
             ? html`<lc-alert variant="error" title=${text('loadFailed.title', { screen: name })}>${text('loadFailed.body')}</lc-alert>`
             : nothing
           : html`<div class="cl-import-table">
               <lc-table
                 label=${text('import-export.templateTable')}
                 .columns=${template.header.map((column) => ({ name: column, label: column }))}
-                .rows=${[Object.fromEntries(template.header.map((column, index) => [column, template?.sample[index] ?? '']))]}
+                .rows=${[Object.fromEntries(template.header.map((column, index) => [column, template.sample[index] ?? '']))]}
               ></lc-table>
             </div>`
       }
@@ -178,62 +242,56 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
           <lc-icon name="download" aria-hidden="true"></lc-icon>${text('import-export.download', { file: name })}
         </lc-button>
         <lc-button variant="primary" @click=${() => {
-          step = 2;
-          draw();
+          this.step.value = 2;
         }}>${text('import-export.next')}</lc-button>
       </div>
     `;
-  };
+  }
 
-  const uploadStep = (): TemplateResult => html`
-    <h2 class="cl-import-heading" tabindex="-1">${text('import-export.uploadTitle')}</h2>
-    <lc-file-upload
-      variant="dropzone"
-      accept=".csv,text/csv"
-      .maxSize=${LIMITS.csvBytes}
-      .showPreview=${false}
-      ?disabled=${busy !== null}
-      @change=${(event: Event) => {
-        const chosen = droppedFile(event);
-        if (chosen !== null) {
-          void check(chosen);
-        }
-      }}
-    ></lc-file-upload>
-    ${uploadError === null ? nothing : html`<p class="cl-import-error" role="alert">${uploadError}</p>`}
-    ${
-      busy === 'checking' && file !== null
-        ? html`<lc-progress-bar indeterminate label=${text('import-export.checking', { file: file.name })}></lc-progress-bar>
-          <p class="cl-import-text" role="status">${text('import-export.checking', { file: file.name })}</p>`
-        : nothing
-    }
-    <div class="cl-import-actions">
-      <lc-button variant="quiet" @click=${() => {
-        step = 1;
-        draw();
-      }}>${text('import-export.backToTemplate')}</lc-button>
-    </div>
-  `;
+  uploadStep(): TemplateResult {
+    const file = this.file.value;
+    const uploadError = this.uploadError.value;
+    return html`
+      <h2 class="cl-import-heading" tabindex="-1">${text('import-export.uploadTitle')}</h2>
+      <lc-file-upload
+        variant="dropzone"
+        accept=".csv,text/csv"
+        .maxSize=${LIMITS.csvBytes}
+        .showPreview=${false}
+        ?disabled=${this.busy.value !== null}
+        @change=${(event: Event) => {
+          const chosen = droppedFile(event);
+          if (chosen !== null) {
+            void this.check(chosen);
+          }
+        }}
+      ></lc-file-upload>
+      ${uploadError === null ? nothing : html`<p class="cl-import-error" role="alert">${uploadError}</p>`}
+      ${
+        this.busy.value === 'checking' && file !== null
+          ? html`<lc-progress-bar indeterminate label=${text('import-export.checking', { file: file.name })}></lc-progress-bar>
+            <p class="cl-import-text" role="status">${text('import-export.checking', { file: file.name })}</p>`
+          : nothing
+      }
+      <div class="cl-import-actions">
+        <lc-button variant="quiet" @click=${() => {
+          this.step.value = 1;
+        }}>${text('import-export.backToTemplate')}</lc-button>
+      </div>
+    `;
+  }
 
-  const tally = (checked: CsvImportReport): TemplateResult => {
-    const errors = new Set(checked.errors.map((error) => error.row)).size;
-    const cell = (count: number, label: string, bad = false): TemplateResult =>
-      html`<div class=${bad && count > 0 ? 'cl-import-tally-cell is-bad' : 'cl-import-tally-cell'}>
-        <b>${count}</b><span>${label}</span>
-      </div>`;
-    return html`<div class="cl-import-tally" role="group" aria-label=${text('import-export.tally')}>
-      ${cell(checked.creates, text('import-export.tally.new'))}
-      ${cell(checked.updates, text('import-export.tally.update'))}
-      ${cell(checked.skips, text('import-export.tally.skip'))}
-      ${cell(errors, text('import-export.tally.errors'), true)}
-    </div>`;
-  };
-
-  const checkStep = (): TemplateResult => {
-    if (report === null || file === null) {
+  checkStep(): TemplateResult {
+    const checked = this.report.value;
+    const file = this.file.value;
+    if (checked === null || file === null) {
       return html``;
     }
-    const checked = report;
+    const busy = this.busy.value;
+    const saveError = this.saveError.value;
+    const duplicate = this.duplicate.value;
+    const duplicateLabel =
+      this.kind === 'bottles' ? text('import-export.duplicateBottles') : text('import-export.duplicateIngredients');
     const rowsToFix = new Set(checked.errors.map((error) => error.row)).size;
     const clean = checked.errors.length === 0;
     const toSave = checked.creates + checked.updates;
@@ -264,9 +322,9 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
           ?disabled=${busy !== null}
           @change=${(event: Event) => {
             const rule = duplicateRule(eventField(event, 'value'));
-            if (rule !== null && rule !== duplicate && file !== null) {
-              duplicate = rule;
-              void check(file);
+            if (rule !== null && rule !== duplicate) {
+              this.duplicate.value = rule;
+              void this.check(file);
             }
           }}
         ></lc-segmented>
@@ -307,21 +365,22 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
             ></lc-progress-bar>`
       }
       <div class="cl-import-actions">
-        <lc-button variant="quiet" ?disabled=${busy !== null} @click=${restart}>${text('import-export.uploadAgain')}</lc-button>
-        <lc-button variant="primary" ?disabled=${!clean || toSave === 0 || busy !== null} @click=${() => void commit()}>
-          ${saveLabel(kind, toSave)}
+        <lc-button variant="quiet" ?disabled=${busy !== null} @click=${() => this.restart()}>${text('import-export.uploadAgain')}</lc-button>
+        <lc-button variant="primary" ?disabled=${!clean || toSave === 0 || busy !== null} @click=${() => void this.commit()}>
+          ${saveLabel(this.kind, toSave)}
         </lc-button>
       </div>
     `;
-  };
+  }
 
-  const doneStep = (): TemplateResult => {
-    if (done === null) {
+  doneStep(): TemplateResult {
+    const finished = this.done.value;
+    if (finished === null) {
       return html``;
     }
-    const { report: saved, more } = done;
+    const { report: saved, more } = finished;
     const added =
-      kind === 'bottles'
+      this.kind === 'bottles'
         ? saved.creates === 1
           ? text('import-export.bottleAdded')
           : text('import-export.bottlesAdded')
@@ -340,66 +399,56 @@ export function csvPanel(kind: CsvKind, ctx: ScreenContext): HTMLElement {
         skipped: saved.skips,
       })} ${moreText}`.trim()}></cl-figure>
       <div class="cl-import-actions">
-        <lc-button variant="primary" @click=${() => ctx.navigate(kind === 'bottles' ? '/shelf' : '/ingredients')}>
-          ${kind === 'bottles' ? text('import-export.seeShelf') : text('import-export.seeIngredients')}
+        <lc-button variant="primary" @click=${() => navigate(this.kind === 'bottles' ? '/shelf' : '/ingredients')}>
+          ${this.kind === 'bottles' ? text('import-export.seeShelf') : text('import-export.seeIngredients')}
         </lc-button>
-        <lc-button variant="quiet" @click=${restart}>${text('import-export.importAnother')}</lc-button>
+        <lc-button variant="quiet" @click=${() => this.restart()}>${text('import-export.importAnother')}</lc-button>
       </div>
     `;
-  };
+  }
 
-  const onStepChange = (event: Event): void => {
+  onStepChange(event: Event): void {
     const next = eventField(event, 'step');
     const previous = eventField(event, 'previousStep');
     if (previous === 4) {
-      restart();
+      this.restart();
       return;
     }
     if (next === 1 || next === 2 || next === 3 || next === 4) {
-      step = next;
-      draw();
-    }
-  };
-
-  function draw(): void {
-    render(
-      html`<lc-wizard
-        total-steps="4"
-        .currentStep=${step}
-        .showNavigation=${false}
-        @step-change=${onStepChange}
-        @wizard-cancel=${(event: Event) => event.stopPropagation()}
-      >
-        <div slot="step-1" class="cl-import-step">${templateStep()}</div>
-        <div slot="step-2" class="cl-import-step">${uploadStep()}</div>
-        <div slot="step-3" class="cl-import-step">${checkStep()}</div>
-        <div slot="step-4" class="cl-import-step">${doneStep()}</div>
-      </lc-wizard>`,
-      element,
-    );
-    if (step !== drawnStep) {
-      drawnStep = step;
-      requestAnimationFrame(() => {
-        const shown = element.querySelector<HTMLElement>(`[slot="step-${step}"]`);
-        (
-          shown?.querySelector<HTMLElement>('.cl-import-heading') ?? shown?.querySelector<HTMLElement>('button')
-        )?.focus();
-      });
+      this.step.value = next;
     }
   }
 
-  draw();
-  readTemplate(kind)
-    .then((loaded) => {
-      template = loaded;
-      draw();
-    })
-    .catch((error: unknown) => {
-      if (!(error instanceof ApiError)) {
-        throw error;
-      }
-      templateFailed = true;
-      draw();
-    });
-  return element;
+  render() {
+    return html`<lc-wizard
+      total-steps="4"
+      .currentStep=${this.step.value}
+      .showNavigation=${false}
+      @step-change=${(event: Event) => this.onStepChange(event)}
+      @wizard-cancel=${(event: Event) => event.stopPropagation()}
+    >
+      <div slot="step-1" class="cl-import-step">${this.templateStep()}</div>
+      <div slot="step-2" class="cl-import-step">${this.uploadStep()}</div>
+      <div slot="step-3" class="cl-import-step">${this.checkStep()}</div>
+      <div slot="step-4" class="cl-import-step">${this.doneStep()}</div>
+    </lc-wizard>`;
+  }
+}
+
+class BottlesCsv extends CsvPanel {
+  readonly kind = 'bottles';
+}
+
+class IngredientsCsv extends CsvPanel {
+  readonly kind = 'ingredients';
+}
+
+View.register(bottlesTag, BottlesCsv);
+View.register(ingredientsTag, IngredientsCsv);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [bottlesTag]: BottlesCsv;
+    [ingredientsTag]: IngredientsCsv;
+  }
 }

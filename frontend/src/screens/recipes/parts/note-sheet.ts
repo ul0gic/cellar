@@ -1,64 +1,74 @@
 import { LIMITS, type Recipe, type Visibility } from '@cellar/contract';
 import { html, nothing } from '@lightstart/light/html';
+import { signal } from '@lightstart/light/signals';
 import { call } from '../../../app/api.ts';
 import { eventText } from '../../../app/events.ts';
 import { actionFailed } from '../../../app/problems.ts';
-import { invalidate } from '../../../app/resources.ts';
+import { dataChanged } from '../../../app/resources.ts';
 import { today } from '../../../app/today.ts';
-import type { SessionPerson } from '../../../app/types.ts';
+import type { OverlayHost, SessionPerson } from '../../../app/types.ts';
 import { toast } from '../../../design-system/toast.ts';
 import { text } from '../../../text/index.ts';
 import { ratingControl } from './rating.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/input.ts';
+import '../../../design-system/lc/segmented.ts';
+import '../../../design-system/lc/textarea.ts';
 import { openSheet } from './sheet.ts';
 
-export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Promise<void> {
+export async function openNoteSheet(host: OverlayHost, recipe: Recipe, session: SessionPerson): Promise<void> {
   const { items: descriptors } = await call('listDescriptors', {});
-  let note = '';
-  let tastedOn = today();
-  let chosen = new Set<number>();
-  let visibility: Visibility = session.person.defaultVisibility;
-  let rating = recipe.mine.rating?.value ?? 0;
-  let saving = false;
+  if (!host.isConnected) {
+    return;
+  }
+  const note = signal('');
+  const tastedOn = signal(today());
+  const chosen = signal<ReadonlySet<number>>(new Set());
+  const visibility = signal<Visibility>(session.person.defaultVisibility);
+  const rating = signal(recipe.mine.rating?.value ?? 0);
+  const saving = signal(false);
 
   const toggle = (id: number): void => {
-    const next = new Set(chosen);
+    const next = new Set(chosen.peek());
     if (next.has(id)) {
       next.delete(id);
     } else if (next.size < LIMITS.noteDescriptors.max) {
       next.add(id);
     }
-    chosen = next;
-    sheet.redraw();
+    chosen.value = next;
   };
 
   const save = async (): Promise<void> => {
-    saving = true;
-    sheet.redraw();
+    saving.value = true;
     try {
       await call('createRecipeNote', {
         params: { id: recipe.id },
-        body: { text: note, tastedOn, descriptorIds: [...chosen], verdict: null, visibility },
+        body: {
+          text: note.peek(),
+          tastedOn: tastedOn.peek(),
+          descriptorIds: [...chosen.peek()],
+          verdict: null,
+          visibility: visibility.peek(),
+        },
       });
-      invalidate('notes', 'recipes', 'stats');
+      dataChanged('notes', 'recipes', 'stats');
       sheet.close();
       toast({ title: text('recipes.noteSaved') });
     } catch (error) {
-      saving = false;
-      sheet.redraw();
+      saving.value = false;
       actionFailed(error, () => void save());
     }
   };
 
-  const sheet = openSheet({
+  const sheet = openSheet(host, {
     heading: () => text('recipes.noteHeading', { name: recipe.name }),
     body: () => html`
       ${ratingControl({
-        value: rating,
+        value: rating.value,
         household: recipe.household.rating,
         recipeId: recipe.id,
         onRated: (value) => {
-          rating = value;
-          sheet.redraw();
+          rating.value = value;
         },
         alwaysHint: true,
       })}
@@ -66,19 +76,17 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
         label=${text('recipes.noteText')}
         rows="4"
         maxlength=${LIMITS.noteText.max}
-        value=${note}
+        value=${note.value}
         @input=${(event: Event) => {
-          note = eventText(event);
-          sheet.redraw();
+          note.value = eventText(event);
         }}
       ></lc-textarea>
       <lc-input
         type="date"
         label=${text('recipes.tastedOn')}
-        .value=${tastedOn}
+        .value=${tastedOn.value}
         @input=${(event: Event) => {
-          tastedOn = eventText(event);
-          sheet.redraw();
+          tastedOn.value = eventText(event);
         }}
       ></lc-input>
       <fieldset class="cl-sheet-section">
@@ -87,8 +95,8 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
           ${descriptors.map(
             (descriptor) => html`<lc-button
               size="sm"
-              variant=${chosen.has(descriptor.id) ? 'primary' : 'quiet'}
-              aria-pressed=${chosen.has(descriptor.id) ? 'true' : 'false'}
+              variant=${chosen.value.has(descriptor.id) ? 'primary' : 'quiet'}
+              aria-pressed=${chosen.value.has(descriptor.id) ? 'true' : 'false'}
               @click=${() => toggle(descriptor.id)}
             >${descriptor.name}</lc-button>`,
           )}
@@ -98,13 +106,13 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
         <span class="cl-sheet-label" aria-hidden="true">${text('recipes.whoCanRead')}</span>
         <lc-segmented
           label=${text('recipes.whoCanRead')}
-          value=${visibility}
+          value=${visibility.value}
           .options=${[
             { value: 'household', label: text('recipes.visibilityHousehold'), icon: 'users' },
             { value: 'private', label: text('recipes.visibilityPrivate'), icon: 'lock' },
           ]}
           @change=${(event: Event) => {
-            visibility = eventText(event) === 'private' ? 'private' : 'household';
+            visibility.value = eventText(event) === 'private' ? 'private' : 'household';
           }}
         ></lc-segmented>
         <p class="cl-sheet-hint">
@@ -118,8 +126,8 @@ export async function openNoteSheet(recipe: Recipe, session: SessionPerson): Pro
       <lc-button variant="quiet" @click=${() => sheet.close()}>${text('action.cancel')}</lc-button>
       <lc-button
         variant="primary"
-        ?disabled=${saving || tastedOn === '' || (note.trim() === '' && chosen.size === 0)}
-        aria-busy=${saving ? 'true' : nothing}
+        ?disabled=${saving.value || tastedOn.value === '' || (note.value.trim() === '' && chosen.value.size === 0)}
+        aria-busy=${saving.value ? 'true' : nothing}
         @click=${() => void save()}
       >${text('recipes.saveNote')}</lc-button>
     `,

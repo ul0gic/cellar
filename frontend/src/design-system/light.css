@@ -312,3 +312,7 @@
   --lc-label-font-weight: var(--weight-medium);
   --lc-label-line-height: var(--leading-body);
 }
+
+:where(.lc-form, lc-form) {
+  --lc-form-error-color: var(--danger);
+}

@@ -10,7 +10,7 @@ import { route } from './controllers/route.ts';
 import { session } from './controllers/session.ts';
 import { shell } from './controllers/shell.ts';
 import { viewport } from './controllers/viewport.ts';
-import { createScreen, FALLBACK_PATH, href, navigate, router } from './router.ts';
+import { createScreen, FALLBACK_PATH, goTo, href, router } from './router.ts';
 import { routes } from './routes.ts';
 import { loadScreen } from './screens.ts';
 import type { SessionPerson } from './types.ts';
@@ -111,7 +111,7 @@ function keycap(): string {
 export async function signOut(who: SessionPerson): Promise<void> {
   await call('logout', {});
   await session.refresh();
-  navigate(who.requireLogin ? '/login' : '/who', { replace: true });
+  goTo(who.requireLogin ? '/login' : '/who', { replace: true });
 }
 
 function openDropdown(event: MouseEvent, selector: string): void {
@@ -124,7 +124,7 @@ function openDropdown(event: MouseEvent, selector: string): void {
 
 function topBar(who: SessionPerson): TemplateResult {
   const accountItems = [
-    { label: text('nav.settings'), icon: 'sliders-horizontal', onClick: () => navigate('/settings/profile') },
+    { label: text('nav.settings'), icon: 'sliders-horizontal', onClick: () => goTo('/settings/profile') },
     {
       label: who.requireLogin ? text('nav.signOut') : text('nav.switchPerson'),
       icon: 'log-out',
@@ -134,7 +134,7 @@ function topBar(who: SessionPerson): TemplateResult {
   const moreItems = MORE_PAGES.map((page) => ({
     label: text(page.label),
     icon: page.icon,
-    onClick: () => navigate(page.path),
+    onClick: () => goTo(page.path),
   }));
   return html`
     <a slot="brand" class="cl-wordmark" href=${href('/')}><span class="cl-mark" aria-hidden="true"></span>${text('app.name')}</a>
@@ -242,10 +242,29 @@ function chrome(): TemplateResult {
   </lc-app-shell>`;
 }
 
+let drawing = false;
+let drawAgain = false;
+
 function draw(): void {
   if (root === null) {
     return;
   }
+  if (drawing) {
+    drawAgain = true;
+    return;
+  }
+  drawing = true;
+  try {
+    do {
+      drawAgain = false;
+      commit(root);
+    } while (drawAgain);
+  } finally {
+    drawing = false;
+  }
+}
+
+function commit(target: HTMLElement): void {
   render(
     html`
       ${chrome()}
@@ -253,7 +272,7 @@ function draw(): void {
       ${overlay ?? nothing}
       ${searchDialog ?? nothing}
     `,
-    root,
+    target,
   );
 }
 
@@ -283,22 +302,22 @@ function redirectFor(code: AuthCode): void {
   switch (code) {
     case 'setup_required':
       if (path !== '/setup') {
-        navigate('/setup', { replace: true });
+        goTo('/setup', { replace: true });
       }
       return;
     case 'login_required':
       if (leaving) {
-        navigate(`/login${next}`, { replace: true });
+        goTo(`/login${next}`, { replace: true });
       }
       return;
     case 'profile_required':
       if (leaving) {
-        navigate(`/who${next}`, { replace: true });
+        goTo(`/who${next}`, { replace: true });
       }
       return;
     case 'password_change_required':
       if (path !== '/login/new-password') {
-        navigate('/login/new-password', { replace: true });
+        goTo('/login/new-password', { replace: true });
       }
       return;
   }
@@ -394,6 +413,7 @@ export async function startShell(target: HTMLElement): Promise<void> {
   });
   onAuthProblem(redirectFor);
   router.subscribe(draw);
+  router.onTitle(draw);
   effect(() => {
     const followed = {
       session: session.current.value,

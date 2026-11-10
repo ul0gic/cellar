@@ -1,6 +1,8 @@
 import { html, type TemplateResult } from '@lightstart/light/html';
 import { href } from '../../../app/router.ts';
 import { today } from '../../../app/today.ts';
+import '../../../design-system/lc/button.ts';
+import '../../../design-system/lc/icon.ts';
 import { formatDate } from '../../../text/format.ts';
 import { text } from '../../../text/index.ts';
 import './print.css';

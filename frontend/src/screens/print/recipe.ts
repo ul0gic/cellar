@@ -1,8 +1,12 @@
 import { formatAbv, formatAmount, type PreferredUnit, type Recipe } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
-import { ApiError, call } from '../../app/api.ts';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { effect } from '@lightstart/light/signals';
+import { route } from '../../app/controllers/route.ts';
+import { session } from '../../app/controllers/session.ts';
+import { apiResource } from '../../app/resources.ts';
 import { setScreenTitle } from '../../app/router.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import type { RouteParams } from '../../app/types.ts';
 import { plateForGlass } from '../../design-system/cl-plate.ts';
 import { text } from '../../text/index.ts';
 import { servingsOf } from '../recipes/parts/servings.ts';
@@ -93,28 +97,46 @@ function page(recipe: Recipe, unit: PreferredUnit, servings: number): TemplateRe
   </article>`;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('div');
-  const id = Number(ctx.params.id);
-  const servings = servingsOf(ctx.query.get('servings'));
-  const unitParam = ctx.query.get('unit');
-  const unit: PreferredUnit =
-    unitParam === 'ml' || unitParam === 'oz' ? unitParam : (ctx.person.current()?.person.unit ?? 'oz');
-  const back = `/recipes/${ctx.params.id ?? ''}`;
-  const show = (body: TemplateResult): void => {
-    render(html`${toolbar(back)}${body}`, element);
-  };
-  call('getRecipe', { params: { id } }).then(
-    (recipe) => {
-      setScreenTitle(recipe.name);
-      show(page(recipe, unit, servings));
-    },
-    (error: unknown) => {
-      if (!(error instanceof ApiError)) {
-        throw error;
+export const tag = 'cl-screen-print-recipe';
+
+class PrintRecipe extends View {
+  params: RouteParams = {};
+
+  readonly recipe = apiResource('getRecipe', ['recipes', 'shelf', 'notes', 'collections']);
+
+  connected(): void {
+    this.recipe.bind(this, { params: { id: Number(this.params.id) } });
+    const retitle = effect(() => {
+      const recipe = this.recipe.value.value;
+      if (recipe !== undefined) {
+        setScreenTitle(recipe.name);
       }
-      show(html`<p class="cl-printed">${error.detail}</p>`);
-    },
-  );
-  return element;
+    });
+    this.$own(() => retitle.dispose());
+  }
+
+  render() {
+    const recipe = this.recipe.value.value;
+    const error = this.recipe.error.value;
+    const back = `/recipes/${this.params.id ?? ''}`;
+    if (recipe !== undefined) {
+      const query = route.query.value;
+      const unitParam = query.get('unit');
+      const unit: PreferredUnit =
+        unitParam === 'ml' || unitParam === 'oz' ? unitParam : (session.current.value?.person.unit ?? 'oz');
+      return html`${toolbar(back)}${page(recipe, unit, servingsOf(query.get('servings')))}`;
+    }
+    if (error !== null) {
+      return html`${toolbar(back)}<p class="cl-printed">${error.detail}</p>`;
+    }
+    return nothing;
+  }
+}
+
+View.register(tag, PrintRecipe);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: PrintRecipe;
+  }
 }

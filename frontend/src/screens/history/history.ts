@@ -1,16 +1,26 @@
 import type { BottleSummary, IsoDate } from '@cellar/contract';
-import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import View from '@lightstart/light';
+import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
+import { route } from '../../app/controllers/route.ts';
 import { eventPage } from '../../app/events.ts';
-import { type WatchState, watch } from '../../app/load.ts';
-import { invalidate, resourceFor } from '../../app/resources.ts';
-import type { ScreenContext } from '../../app/types.ts';
+import { loadState } from '../../app/load.ts';
+import { apiResource, dataChanged } from '../../app/resources.ts';
+import { setQuery } from '../../app/router.ts';
 import { illustration } from '../../design-system/illustration.ts';
+import { waiting } from '../../design-system/load-view.ts';
 import { toast } from '../../design-system/toast.ts';
 import { formatDate, formatNumber } from '../../text/format.ts';
 import { text } from '../../text/index.ts';
-import { attempt, follow, money, waiting } from '../shelf/parts/kit.ts';
+import '../../design-system/cl-figure.ts';
+import '../../design-system/lc/button.ts';
+import '../../design-system/lc/empty-state.ts';
+import '../../design-system/lc/icon.ts';
+import '../../design-system/lc/pagination.ts';
+import { attempt, money } from '../shelf/parts/kit.ts';
 import './history.css';
+
+export const tag = 'cl-screen-history-history';
 
 // D-1 §8.30: list rows page at 100.
 const PAGE_SIZE = 100;
@@ -34,78 +44,57 @@ function pageNumber(value: string | null): number {
   return Number.isSafeInteger(page) && page > 0 ? page : 1;
 }
 
-export function screen(ctx: ScreenContext): HTMLElement {
-  const element = document.createElement('section');
-  element.className = 'cl-kit-screen cl-reading cl-history';
-  const stats = resourceFor('getStats', {}, { tags: ['stats', 'shelf'] });
-  let stop: (() => void) | null = null;
+function changed(): void {
+  dataChanged('shelf', 'ingredients', 'recipes', 'stats');
+}
 
-  const listFor = () =>
-    resourceFor(
-      'listBottles',
-      {
-        query: {
-          status: ['finished'],
-          sort: 'finished',
-          order: 'desc',
-          page: pageNumber(ctx.query.get('page')),
-          pageSize: PAGE_SIZE,
-        },
-      },
-      { tags: ['shelf'] },
-    );
-
-  const changed = (): void => {
-    invalidate('shelf', 'ingredients', 'recipes', 'stats');
-  };
-
-  const reopen = (bottle: BottleSummary): Promise<void> =>
-    attempt(async () => {
-      await call('reopenBottle', { params: { id: bottle.id } });
-      changed();
-      const finishedOn = bottle.finishedOn;
-      toast({
-        title: text('history.reopened', { name: bottle.name }),
-        ...(finishedOn === null
-          ? {}
-          : {
-              action: {
-                label: text('toast.undo'),
-                run: () =>
-                  void attempt(async () => {
-                    await call('finishBottle', { params: { id: bottle.id }, body: { on: finishedOn } });
-                    toast({ title: text('toast.undone') });
-                    changed();
-                  }),
-              },
-            }),
-      });
+function reopen(bottle: BottleSummary): Promise<void> {
+  return attempt(async () => {
+    await call('reopenBottle', { params: { id: bottle.id } });
+    changed();
+    const finishedOn = bottle.finishedOn;
+    toast({
+      title: text('history.reopened', { name: bottle.name }),
+      ...(finishedOn === null
+        ? {}
+        : {
+            action: {
+              label: text('toast.undo'),
+              run: () =>
+                void attempt(async () => {
+                  await call('finishBottle', { params: { id: bottle.id }, body: { on: finishedOn } });
+                  toast({ title: text('toast.undone') });
+                  changed();
+                }),
+            },
+          }),
     });
+  });
+}
 
-  const line = (bottle: BottleSummary): string => {
-    const finished = bottle.finishedOn;
-    if (finished === null) {
-      return bottle.ingredient.name;
-    }
-    const base =
-      bottle.openedOn === null
-        ? text('history.lineNoOpen', {
-            ingredient: bottle.ingredient.name,
-            finished: formatDate(finished, 'this-year'),
-          })
-        : text('history.line', {
-            ingredient: bottle.ingredient.name,
-            opened: formatDate(bottle.openedOn, 'this-year'),
-            finished: formatDate(finished, 'this-year'),
-            days: daysText(daysBetween(bottle.openedOn, finished)),
-          });
-    const price = bottle.pricePaidMinor;
-    return price === null || price === undefined
-      ? base
-      : `${base} ${text('history.price', { price: money(price, ctx.person) })}`;
-  };
+function line(bottle: BottleSummary): string {
+  const finished = bottle.finishedOn;
+  if (finished === null) {
+    return bottle.ingredient.name;
+  }
+  const base =
+    bottle.openedOn === null
+      ? text('history.lineNoOpen', {
+          ingredient: bottle.ingredient.name,
+          finished: formatDate(finished, 'this-year'),
+        })
+      : text('history.line', {
+          ingredient: bottle.ingredient.name,
+          opened: formatDate(bottle.openedOn, 'this-year'),
+          finished: formatDate(finished, 'this-year'),
+          days: daysText(daysBetween(bottle.openedOn, finished)),
+        });
+  const price = bottle.pricePaidMinor;
+  return price === null || price === undefined ? base : `${base} ${text('history.price', { price: money(price) })}`;
+}
 
-  const row = (bottle: BottleSummary): TemplateResult => html`<li class="cl-kit-row">
+function row(bottle: BottleSummary): TemplateResult {
+  return html`<li class="cl-kit-row">
     <span class="cl-kit-row-text">
       <span class="cl-kit-row-name">${bottle.name}</span>
       <span class="cl-kit-row-sub">${line(bottle)}</span>
@@ -114,23 +103,43 @@ export function screen(ctx: ScreenContext): HTMLElement {
       <lc-icon name="rotate-ccw" aria-hidden="true"></lc-icon>${text('history.reopen')}
     </lc-button>
   </li>`;
+}
 
-  const groups = (items: readonly BottleSummary[]): TemplateResult[] => {
-    const years = new Map<string, BottleSummary[]>();
-    for (const bottle of items) {
-      const year = bottle.finishedOn?.slice(0, 4) ?? '';
-      years.set(year, [...(years.get(year) ?? []), bottle]);
-    }
-    return [...years].map(
-      ([year, bottles]) => html`<section class="cl-kit-section" aria-labelledby=${`cl-history-${year}`}>
-        <h2 class="cl-kit-section-title" id=${`cl-history-${year}`}>${year}</h2>
-        <ul class="cl-kit-list">${bottles.map(row)}</ul>
-      </section>`,
-    );
-  };
+function groups(items: readonly BottleSummary[]): TemplateResult[] {
+  const years = new Map<string, BottleSummary[]>();
+  for (const bottle of items) {
+    const year = bottle.finishedOn?.slice(0, 4) ?? '';
+    years.set(year, [...(years.get(year) ?? []), bottle]);
+  }
+  return [...years].map(
+    ([year, bottles]) => html`<section class="cl-kit-section" aria-labelledby=${`cl-history-${year}`}>
+      <h2 class="cl-kit-section-title" id=${`cl-history-${year}`}>${year}</h2>
+      <ul class="cl-kit-list">${bottles.map(row)}</ul>
+    </section>`,
+  );
+}
 
-  const head = (): TemplateResult | typeof nothing => {
-    const byYear = stats.peek()?.finishedByYear;
+class HistoryScreen extends View {
+  readonly stats = apiResource('getStats', ['stats', 'shelf']);
+  readonly list = apiResource('listBottles', ['shelf']);
+  readonly state = loadState([this.list]);
+
+  connected(): void {
+    this.classList.add('cl-kit-screen', 'cl-reading', 'cl-history');
+    this.stats.bind(this, {});
+    this.list.bind(this, () => ({
+      query: {
+        status: ['finished'],
+        sort: 'finished',
+        order: 'desc',
+        page: pageNumber(route.query.value.get('page')),
+        pageSize: PAGE_SIZE,
+      },
+    }));
+  }
+
+  private head(): TemplateResult | typeof nothing {
+    const byYear = this.stats.value.value?.finishedByYear;
     if (byYear === undefined) {
       return nothing;
     }
@@ -142,12 +151,11 @@ export function screen(ctx: ScreenContext): HTMLElement {
       label=${now === 1 ? text('history.figureOne') : text('history.figureLabel')}
       sublabel=${all === 1 ? text('history.sinceOne') : text('history.since', { count: formatNumber(all) })}
     ></cl-figure>`;
-  };
+  }
 
-  const draw = (state: WatchState): void => {
-    const list = listFor();
-    const page = list.peek();
-    const pending = waiting(state, list, text('nav.history'), 'rows');
+  render() {
+    const page = this.list.value.value;
+    const pending = waiting(this.state, text('nav.history'), 'rows');
     const pages = page === undefined ? 0 : Math.ceil(page.total / PAGE_SIZE);
     let body: TemplateResult | HTMLElement | typeof nothing | null = pending;
     if (pending === null && page !== undefined) {
@@ -161,26 +169,25 @@ export function screen(ctx: ScreenContext): HTMLElement {
                 pages > 1
                   ? html`<nav class="cl-history-pager" aria-label=${text('history.pages')}>
                       <lc-pagination
-                        current=${pageNumber(ctx.query.get('page'))}
+                        current=${pageNumber(route.query.value.get('page'))}
                         total=${pages}
                         @change=${(event: Event) => {
                           const next = eventPage(event);
-                          ctx.query.set({ page: next !== null && next > 1 ? String(next) : null }, 'push');
+                          setQuery({ page: next !== null && next > 1 ? String(next) : null }, 'push');
                         }}
                       ></lc-pagination>
                     </nav>`
                   : nothing
               }`;
     }
-    render(html`${head()} ${body}`, element);
-  };
+    return html`${this.head()} ${body}`;
+  }
+}
 
-  const start = (): void => {
-    stop?.();
-    stop = watch(element, [stats, listFor()], draw).stop;
-  };
-  follow(element, ctx.query.subscribe, start);
-  follow(element, ctx.person.subscribe, start);
-  start();
-  return element;
+View.register(tag, HistoryScreen);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    [tag]: HistoryScreen;
+  }
 }
