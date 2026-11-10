@@ -2,13 +2,12 @@ import { Controller } from '@lightstart/light/controller/class';
 import { signal } from '@lightstart/light/signals';
 
 export interface TaxonDraft {
-  readonly name: string;
-  readonly dilution: string;
+  readonly values: Record<string, unknown>;
   readonly error: string;
   readonly busy: boolean;
 }
 
-const BLANK_DRAFT: TaxonDraft = { name: '', dilution: '', error: '', busy: false };
+const BLANK_DRAFT: TaxonDraft = { values: {}, error: '', busy: false };
 
 export class SettingsTaxonLists extends Controller {
   readonly drafts = signal<ReadonlyMap<string, TaxonDraft>>(new Map());

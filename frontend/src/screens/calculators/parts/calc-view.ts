@@ -6,13 +6,15 @@ import {
   LIMITS,
   validateCalculator,
 } from '@cellar/contract';
+import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
+import type { FormField } from '@lightstart/components/types.js';
 import View from '@lightstart/light';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { effect, signal } from '@lightstart/light/signals';
-import { call } from '../../../app/api.ts';
-import { eventText } from '../../../app/events.ts';
+import { ApiError, call } from '../../../app/api.ts';
+import { eventText, formValues } from '../../../app/events.ts';
 import { loadState } from '../../../app/load.ts';
-import { actionFailed } from '../../../app/problems.ts';
+import { actionFailed, formErrors } from '../../../app/problems.ts';
 import { apiResource } from '../../../app/resources.ts';
 import { navigate, setScreenTitle } from '../../../app/router.ts';
 import type { RouteParams } from '../../../app/types.ts';
@@ -20,6 +22,7 @@ import { confirm } from '../../../design-system/dialogs.ts';
 import { illustration } from '../../../design-system/illustration.ts';
 import '../../../design-system/lc/button.ts';
 import '../../../design-system/lc/empty-state.ts';
+import '../../../design-system/lc/form.ts';
 import '../../../design-system/lc/icon.ts';
 import '../../../design-system/lc/input.ts';
 import '../../../design-system/lc/list-row.ts';
@@ -52,13 +55,167 @@ function inputOf(calculator: Calculator): CalculatorInput {
   };
 }
 
-function issueAt(issues: readonly CalculatorIssue[], path: string): string {
-  return issues.find((issue) => issue.path === path)?.error.message ?? '';
+type InputRow = CalculatorInput['inputs'][number];
+type OutputRow = CalculatorInput['outputs'][number];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-function fieldError(message: string): TemplateResult | typeof nothing {
-  return message === '' ? nothing : html`<p class="cl-calc-error" role="alert">${message}</p>`;
+function isInputRow(value: unknown): value is InputRow {
+  return (
+    isRecord(value) &&
+    typeof value.key === 'string' &&
+    typeof value.label === 'string' &&
+    typeof value.defaultValue === 'number' &&
+    typeof value.suffix === 'string'
+  );
 }
+
+function isOutputRow(value: unknown): value is OutputRow {
+  return (
+    isRecord(value) &&
+    typeof value.key === 'string' &&
+    typeof value.label === 'string' &&
+    typeof value.expression === 'string' &&
+    typeof value.decimals === 'number' &&
+    typeof value.suffix === 'string'
+  );
+}
+
+function draftFrom(values: Record<string, unknown>, previous: CalculatorInput): CalculatorInput {
+  return {
+    ...previous,
+    name: typeof values.name === 'string' ? values.name : previous.name,
+    inputs: Array.isArray(values.inputs) ? values.inputs.filter(isInputRow) : previous.inputs,
+    outputs: Array.isArray(values.outputs) ? values.outputs.filter(isOutputRow) : previous.outputs,
+  };
+}
+
+function rowNames(draft: CalculatorInput): string[] {
+  return [
+    ...draft.inputs.map((_, index) => `inputs.${index}.key`),
+    ...draft.outputs.flatMap((_, index) => [`outputs.${index}.expression`, `outputs.${index}.key`]),
+  ];
+}
+
+function issueMessages(issues: readonly CalculatorIssue[]): Record<string, string> {
+  const messages: Record<string, string> = {};
+  for (const issue of issues) {
+    if (!(issue.path in messages)) {
+      messages[issue.path] = issue.error.message;
+    }
+  }
+  return messages;
+}
+
+function rowError(message: string | undefined): TemplateResult | typeof nothing {
+  return message === undefined || message === '' ? nothing : html`<p class="cl-calc-error" role="alert">${message}</p>`;
+}
+
+registerFormFieldRenderer(
+  'calculators-name',
+  (_field, value, onChange, template) => template`
+  <lc-input
+    label=${text('calculators.name')}
+    maxlength=${LIMITS.name.max}
+    value=${typeof value === 'string' ? value : ''}
+    @input=${(event: Event) => onChange(eventText(event))}
+  ></lc-input>
+`,
+);
+
+registerFormFieldRenderer('calculators-inputs', (field, value, onChange, template) => {
+  const rows = Array.isArray(value) ? value.filter(isInputRow) : [];
+  const patch = (index: number, change: Partial<InputRow>): void =>
+    onChange(rows.map((row, at) => (at === index ? { ...row, ...change } : row)));
+  return template`<fieldset class="cl-calc-group">
+    <legend>${text('calculators.inputs')}</legend>
+    ${rows.map(
+      (row, index) => template`<div class="cl-calc-row">
+        <lc-input
+          label=${text('calculators.inputName', { position: index + 1 })}
+          value=${row.key}
+          @input=${(event: Event) => patch(index, { key: eventText(event) })}
+        ></lc-input>
+        <lc-input
+          label=${text('calculators.inputTitle', { position: index + 1 })}
+          value=${row.label}
+          @input=${(event: Event) => patch(index, { label: eventText(event) })}
+        ></lc-input>
+        <lc-input
+          label=${text('calculators.inputDefault', { position: index + 1 })}
+          type="number"
+          value=${String(row.defaultValue)}
+          @input=${(event: Event) => patch(index, { defaultValue: Number(eventText(event)) || 0 })}
+        ></lc-input>
+        <lc-input
+          label=${text('calculators.inputUnit', { position: index + 1 })}
+          maxlength=${LIMITS.calculatorSuffix.max}
+          value=${row.suffix}
+          @input=${(event: Event) => patch(index, { suffix: eventText(event) })}
+        ></lc-input>
+        ${rowError(field.errors?.[`inputs.${index}.key`])}
+        <lc-button
+          variant="ghost"
+          ?disabled=${rows.length === 1}
+          @click=${() => onChange(rows.filter((_, at) => at !== index))}
+        >${text('calculators.removeInput', { position: index + 1 })}</lc-button>
+      </div>`,
+    )}
+    <lc-button
+      ?disabled=${rows.length >= LIMITS.calculatorInputs.max}
+      @click=${() => onChange([...rows, { key: `input_${rows.length + 1}`, label: '', defaultValue: 0, suffix: '' }])}
+    >${text('calculators.addInput')}</lc-button>
+  </fieldset>`;
+});
+
+registerFormFieldRenderer('calculators-outputs', (field, value, onChange, template) => {
+  const rows = Array.isArray(value) ? value.filter(isOutputRow) : [];
+  const patch = (index: number, change: Partial<OutputRow>): void =>
+    onChange(rows.map((row, at) => (at === index ? { ...row, ...change } : row)));
+  const inputNames = typeof field.inputNames === 'string' ? field.inputNames : '';
+  return template`<fieldset class="cl-calc-group">
+    <legend>${text('calculators.results')}</legend>
+    <p class="cl-calc-muted">${text('calculators.formulaHint', { inputs: inputNames })}</p>
+    ${rows.map(
+      (row, index) => template`<div class="cl-calc-row">
+        <lc-input
+          label=${text('calculators.resultLabel', { position: index + 1 })}
+          value=${row.label}
+          @input=${(event: Event) => patch(index, { label: eventText(event) })}
+        ></lc-input>
+        <lc-input
+          label=${text('calculators.resultFormula', { position: index + 1 })}
+          value=${row.expression}
+          @input=${(event: Event) => patch(index, { expression: eventText(event) })}
+        ></lc-input>
+        <lc-input
+          label=${text('calculators.resultUnit', { position: index + 1 })}
+          maxlength=${LIMITS.calculatorSuffix.max}
+          value=${row.suffix}
+          @input=${(event: Event) => patch(index, { suffix: eventText(event) })}
+        ></lc-input>
+        ${rowError(field.errors?.[`outputs.${index}.expression`] ?? field.errors?.[`outputs.${index}.key`])}
+        <lc-button
+          variant="ghost"
+          ?disabled=${rows.length === 1}
+          @click=${() => onChange(rows.filter((_, at) => at !== index))}
+        >${text('calculators.removeResult', { position: index + 1 })}</lc-button>
+      </div>`,
+    )}
+    <lc-button
+      ?disabled=${rows.length >= LIMITS.calculatorOutputs.max}
+      @click=${() =>
+        onChange([...rows, { key: `result_${rows.length + 1}`, label: '', expression: '', decimals: 1, suffix: '' }])}
+    >${text('calculators.addResult')}</lc-button>
+  </fieldset>`;
+});
+
+const FIXED_FIELDS: FormField[] = [
+  { name: 'name', type: 'calculators-name', cmsType: 'calculators-name' },
+  { name: 'inputs', type: 'calculators-inputs', cmsType: 'calculators-inputs' },
+];
 
 export class CalculatorScreen extends View {
   params: RouteParams = {};
@@ -68,6 +225,7 @@ export class CalculatorScreen extends View {
   readonly values = signal<Values>({});
   readonly shownId = signal<number | null>(null);
   readonly saving = signal(false);
+  readonly serverErrors = signal<Readonly<Record<string, string>>>({});
 
   get selectedId(): number | null {
     return this.params.id === undefined ? null : Number(this.params.id);
@@ -109,6 +267,7 @@ export class CalculatorScreen extends View {
     }
     const { id, draft } = mode;
     this.saving.value = true;
+    this.serverErrors.value = {};
     try {
       const saved =
         id === null
@@ -123,7 +282,15 @@ export class CalculatorScreen extends View {
       }
     } catch (error) {
       this.saving.value = false;
-      actionFailed(error, () => void this.save());
+      if (error instanceof ApiError && error.fields.length > 0) {
+        const { fields, rest } = formErrors(error, rowNames(draft));
+        this.serverErrors.value = fields;
+        if (rest.length > 0 || Object.keys(fields).length === 0) {
+          actionFailed(error, () => void this.save());
+        }
+      } else {
+        actionFailed(error, () => void this.save());
+      }
     }
   }
 
@@ -217,155 +384,36 @@ export class CalculatorScreen extends View {
     const issues = validateCalculator(draft);
     const inputNames = draft.inputs.map((field) => field.key).join(` ${text('calculators.and')} `);
     const blocked = issues.length > 0 || draft.name.trim() === '' || this.saving.value;
-    return html`<form
+    const fields: FormField[] = [
+      ...FIXED_FIELDS,
+      { name: 'outputs', type: 'calculators-outputs', cmsType: 'calculators-outputs', inputNames },
+    ];
+    return html`<lc-form
       class="cl-calc-open"
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
+      layout="stacked"
+      .fields=${fields}
+      .data=${{ name: draft.name, inputs: draft.inputs, outputs: draft.outputs }}
+      .errors=${{ ...issueMessages(issues), ...this.serverErrors.value }}
+      @field-change=${(event: Event) => {
+        const values = formValues(event);
+        if (values !== null) {
+          this.serverErrors.value = {};
+          this.edit((current) => draftFrom(values, current));
+        }
+      }}
+      @form-submit=${() => {
         if (!blocked) {
           void this.save();
         }
       }}
     >
-      <lc-input
-        label=${text('calculators.name')}
-        maxlength=${LIMITS.name.max}
-        value=${draft.name}
-        @input=${(event: Event) => this.edit((current) => ({ ...current, name: eventText(event) }))}
-      ></lc-input>
-      <fieldset class="cl-calc-group">
-        <legend>${text('calculators.inputs')}</legend>
-        ${draft.inputs.map(
-          (field, index) => html`<div class="cl-calc-row">
-            <lc-input
-              label=${text('calculators.inputName', { position: index + 1 })}
-              value=${field.key}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  inputs: current.inputs.map((item, at) => (at === index ? { ...item, key: eventText(event) } : item)),
-                }))}
-            ></lc-input>
-            <lc-input
-              label=${text('calculators.inputTitle', { position: index + 1 })}
-              value=${field.label}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  inputs: current.inputs.map((item, at) =>
-                    at === index ? { ...item, label: eventText(event) } : item,
-                  ),
-                }))}
-            ></lc-input>
-            <lc-input
-              label=${text('calculators.inputDefault', { position: index + 1 })}
-              type="number"
-              value=${String(field.defaultValue)}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  inputs: current.inputs.map((item, at) =>
-                    at === index ? { ...item, defaultValue: Number(eventText(event)) || 0 } : item,
-                  ),
-                }))}
-            ></lc-input>
-            <lc-input
-              label=${text('calculators.inputUnit', { position: index + 1 })}
-              maxlength=${LIMITS.calculatorSuffix.max}
-              value=${field.suffix}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  inputs: current.inputs.map((item, at) =>
-                    at === index ? { ...item, suffix: eventText(event) } : item,
-                  ),
-                }))}
-            ></lc-input>
-            ${fieldError(issueAt(issues, `inputs.${index}.key`))}
-            <lc-button
-              variant="ghost"
-              ?disabled=${draft.inputs.length === 1}
-              @click=${() => this.edit((current) => ({ ...current, inputs: current.inputs.filter((_, at) => at !== index) }))}
-            >${text('calculators.removeInput', { position: index + 1 })}</lc-button>
-          </div>`,
-        )}
-        <lc-button
-          ?disabled=${draft.inputs.length >= LIMITS.calculatorInputs.max}
-          @click=${() =>
-            this.edit((current) => ({
-              ...current,
-              inputs: [
-                ...current.inputs,
-                { key: `input_${current.inputs.length + 1}`, label: '', defaultValue: 0, suffix: '' },
-              ],
-            }))}
-        >${text('calculators.addInput')}</lc-button>
-      </fieldset>
-      <fieldset class="cl-calc-group">
-        <legend>${text('calculators.results')}</legend>
-        <p class="cl-calc-muted">${text('calculators.formulaHint', { inputs: inputNames })}</p>
-        ${draft.outputs.map(
-          (field, index) => html`<div class="cl-calc-row">
-            <lc-input
-              label=${text('calculators.resultLabel', { position: index + 1 })}
-              value=${field.label}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  outputs: current.outputs.map((item, at) =>
-                    at === index ? { ...item, label: eventText(event) } : item,
-                  ),
-                }))}
-            ></lc-input>
-            <lc-input
-              label=${text('calculators.resultFormula', { position: index + 1 })}
-              value=${field.expression}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  outputs: current.outputs.map((item, at) =>
-                    at === index ? { ...item, expression: eventText(event) } : item,
-                  ),
-                }))}
-            ></lc-input>
-            <lc-input
-              label=${text('calculators.resultUnit', { position: index + 1 })}
-              maxlength=${LIMITS.calculatorSuffix.max}
-              value=${field.suffix}
-              @input=${(event: Event) =>
-                this.edit((current) => ({
-                  ...current,
-                  outputs: current.outputs.map((item, at) =>
-                    at === index ? { ...item, suffix: eventText(event) } : item,
-                  ),
-                }))}
-            ></lc-input>
-            ${fieldError(issueAt(issues, `outputs.${index}.expression`) || issueAt(issues, `outputs.${index}.key`))}
-            <lc-button
-              variant="ghost"
-              ?disabled=${draft.outputs.length === 1}
-              @click=${() => this.edit((current) => ({ ...current, outputs: current.outputs.filter((_, at) => at !== index) }))}
-            >${text('calculators.removeResult', { position: index + 1 })}</lc-button>
-          </div>`,
-        )}
-        <lc-button
-          ?disabled=${draft.outputs.length >= LIMITS.calculatorOutputs.max}
-          @click=${() =>
-            this.edit((current) => ({
-              ...current,
-              outputs: [
-                ...current.outputs,
-                { key: `result_${current.outputs.length + 1}`, label: '', expression: '', decimals: 1, suffix: '' },
-              ],
-            }))}
-        >${text('calculators.addResult')}</lc-button>
-      </fieldset>
       <div class="cl-calc-footer">
         <lc-button variant="quiet" @click=${() => {
           this.mode.value = { kind: 'use' };
         }}>${text('action.cancel')}</lc-button>
         <lc-button variant="primary" type="submit" ?disabled=${blocked}>${text('calculators.save')}</lc-button>
       </div>
-    </form>`;
+    </lc-form>`;
   }
 
   panel(calculators: readonly Calculator[]): TemplateResult {

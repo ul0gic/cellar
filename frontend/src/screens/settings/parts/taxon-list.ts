@@ -4,7 +4,7 @@ import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { signal } from '@lightstart/light/signals';
 import { ApiError } from '../../../app/api.ts';
 import { settingsTaxonLists } from '../../../app/controllers/settings-taxon-lists.ts';
-import { eventText, formValues, valueText } from '../../../app/events.ts';
+import { formValues, valueText } from '../../../app/events.ts';
 import { actionFailed, problemText } from '../../../app/problems.ts';
 import { dataChanged } from '../../../app/resources.ts';
 import type { OverlayHost } from '../../../app/types.ts';
@@ -16,7 +16,6 @@ import '../../../design-system/lc/button.ts';
 import '../../../design-system/lc/dropdown.ts';
 import '../../../design-system/lc/form.ts';
 import '../../../design-system/lc/icon.ts';
-import '../../../design-system/lc/input.ts';
 
 export interface TaxonRow {
   readonly id: number;
@@ -37,6 +36,32 @@ export interface TaxonKind {
 }
 
 const DILUTION_MAX = 100;
+
+const addFields = new WeakMap<TaxonKind, FormField[]>();
+
+function fieldsOf(kind: TaxonKind): FormField[] {
+  const known = addFields.get(kind);
+  if (known !== undefined) {
+    return known;
+  }
+  const fields: FormField[] = [
+    { name: 'name', type: 'text', label: text('settings.taxonomy.add', { noun: kind.noun }) },
+    ...(kind.dilution === true
+      ? [
+          {
+            name: 'dilution',
+            type: 'number',
+            label: text('settings.taxonomy.dilution'),
+            inputmode: 'decimal',
+            min: 0,
+            max: DILUTION_MAX,
+          },
+        ]
+      : []),
+  ];
+  addFields.set(kind, fields);
+  return fields;
+}
 
 const RENAME_FIELDS: FormField[] = [{ name: 'name', type: 'text', label: text('settings.taxonomy.name') }];
 
@@ -120,12 +145,12 @@ async function remove(host: OverlayHost, kind: TaxonKind, row: TaxonRow): Promis
 
 async function add(host: OverlayHost, kind: TaxonKind): Promise<void> {
   const draft = settingsTaxonLists.draft(kind.key);
-  const name = draft.name.trim();
-  const dilution = Number(draft.dilution);
+  const name = valueText(draft.values, 'name').trim();
+  const dilution = draft.values.dilution;
   let invalid = name.length === 0 ? text('settings.taxonomy.nameMissing') : '';
   if (invalid === '' && kind.dilution === true) {
     const valid =
-      draft.dilution.trim() !== '' && Number.isFinite(dilution) && dilution >= 0 && dilution <= DILUTION_MAX;
+      typeof dilution === 'number' && Number.isFinite(dilution) && dilution >= 0 && dilution <= DILUTION_MAX;
     invalid = valid ? '' : text('settings.taxonomy.dilutionInvalid');
   }
   if (invalid !== '') {
@@ -134,10 +159,10 @@ async function add(host: OverlayHost, kind: TaxonKind): Promise<void> {
   }
   settingsTaxonLists.patch(kind.key, { error: '', busy: true });
   try {
-    await kind.create(name, dilution);
+    await kind.create(name, typeof dilution === 'number' ? dilution : 0);
     dataChanged('settings', 'recipes');
     if (host.isConnected) {
-      settingsTaxonLists.patch(kind.key, { name: '', dilution: '' });
+      settingsTaxonLists.patch(kind.key, { values: {} });
     }
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'duplicate_name' || error.code === 'validation_failed')) {
@@ -205,39 +230,28 @@ function section(host: OverlayHost, kind: TaxonKind): TemplateResult {
         ? html`<p class="cl-muted">${text('settings.taxonomy.none')}</p>`
         : html`<div class="cl-panel">${items.map((item) => rowView(host, kind, item))}</div>`
     }
-    <form
+    <lc-form
       class="cl-taxon-add"
       novalidate
-      @submit=${(event: SubmitEvent) => {
-        event.preventDefault();
+      .fields=${fieldsOf(kind)}
+      .data=${draft.values}
+      .errors=${{ name: draft.error }}
+      @field-change=${(event: Event) => {
+        const values = formValues(event);
+        if (values !== null) {
+          settingsTaxonLists.patch(kind.key, { values });
+        }
+      }}
+      @form-submit=${() => {
         if (!settingsTaxonLists.draft(kind.key).busy) {
           void add(host, kind);
         }
       }}
     >
-      <lc-input
-        label=${text('settings.taxonomy.add', { noun: kind.noun })}
-        .value=${draft.name}
-        error-message=${draft.error}
-        @input=${(event: Event) => settingsTaxonLists.patch(kind.key, { name: eventText(event) })}
-      ></lc-input>
-      ${
-        kind.dilution === true
-          ? html`<lc-input
-              label=${text('settings.taxonomy.dilution')}
-              type="number"
-              inputmode="decimal"
-              min="0"
-              max=${DILUTION_MAX}
-              .value=${draft.dilution}
-              @input=${(event: Event) => settingsTaxonLists.patch(kind.key, { dilution: eventText(event) })}
-            ></lc-input>`
-          : nothing
-      }
       <lc-button variant="quiet" type="submit" ?disabled=${draft.busy}
         ><lc-icon name="plus" aria-hidden="true"></lc-icon>${text('settings.taxonomy.addButton')}</lc-button
       >
-    </form>
+    </lc-form>
   </section>`;
 }
 

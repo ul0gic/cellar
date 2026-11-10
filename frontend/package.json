@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@lightstart/components": "github:ul0gic/lightstart#64eea3b70e810841a3c7d9eabb861a3315e5d9e1",
-    "@lightstart/light": "github:ul0gic/lightstart#0a987b3a4530fb9975e4e0ce949f7425bec4d3d2",
+    "@lightstart/components": "github:ul0gic/lightstart#5ea1f8132e7185a7a86b634386307de635a687e1",
+    "@lightstart/light": "github:ul0gic/lightstart#42f98a1cceb11baaa6c78a1cbac7db30669e18be",
     "@cellar/contract": "workspace:*",
     "@iconify-json/lucide": "1.2.152",
     "tailwindcss": "4.3.5",

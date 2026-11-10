@@ -139,3 +139,7 @@
     display: none;
   }
 }
+
+lc-form.cl-calc-open {
+  --lc-form-gap: var(--space-4);
+}

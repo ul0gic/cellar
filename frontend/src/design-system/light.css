@@ -313,6 +313,7 @@
   --lc-label-line-height: var(--leading-body);
 }
 
-:where(.lc-form, lc-form) {
-  --lc-form-error-color: var(--danger);
+:where(.lc-empty-state, lc-empty-state) {
+  --lc-empty-state-desc-color: var(--text-faint);
+  --lc-empty-state-desc-opacity: 1;
 }

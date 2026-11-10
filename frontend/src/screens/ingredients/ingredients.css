@@ -129,3 +129,23 @@
   font-weight: var(--weight-medium);
   text-decoration: none;
 }
+
+.cl-ingr-form lc-form {
+  display: block;
+}
+
+.cl-ingr-form lc-form form {
+  --lc-form-gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  column-gap: var(--space-3);
+}
+
+.cl-ingr-form .form-field.cl-ingr-wide,
+.cl-ingr-form .cl-kit-sheet-footer {
+  grid-column: 1 / -1;
+}
+
+.cl-ingr-form .form-hint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

@@ -39,8 +39,6 @@ const TREE = [
   { value: '3', label: ' Gin' },
 ];
 
-const NO_DEFAULT = 'none';
-
 const UNITS = [
   { value: '', label: text('ingredients.unitNone') },
   ...UNIT_IDS.map((unit) => ({ value: unit, label: UNIT_LABELS[unit] })),
@@ -128,7 +126,7 @@ const FIELDS: FormField[] = [
     name: 'defaultUnit',
     type: 'select',
     label: text('ingredients.defaultUnit'),
-    options: [{ value: NO_DEFAULT, label: text('ingredients.unitNone') }, ...UNITS.slice(1)],
+    options: UNITS,
   },
   { name: 'origin', type: 'text', label: text('ingredients.originField'), class: 'cl-demo-tight' },
   {
@@ -171,7 +169,7 @@ class DemoForm extends View {
     name: '',
     parentId: '',
     strength: '0',
-    defaultUnit: NO_DEFAULT,
+    defaultUnit: '',
     origin: '',
     color: '',
     description: '',
