@@ -332,7 +332,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return html`<section class="cl-home-section cl-rise" style="--i:3" aria-labelledby="home-shelf">
       <div class="cl-section-head">
         <h2 class="cl-section-title" id="home-shelf">${text('home.latest')}</h2>
-        <a class="cl-standalone-link" href=${href('/shelf')}>${text('home.bottles', { count: formatNumber(page.total) })}</a>
+        <a class="cl-standalone-link" href=${href('/shelf')}>${page.total === 1 ? text('home.bottlesOne') : text('home.bottles', { count: formatNumber(page.total) })}</a>
       </div>
       <lc-scroller class="cl-strip">${page.items.map(bottleTile)}</lc-scroller>
     </section>`;

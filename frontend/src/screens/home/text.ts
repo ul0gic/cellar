@@ -20,6 +20,7 @@ export const strings = {
   'home.gotIt': 'Got {name}. Removed from the list.',
   'home.latest': 'Latest on the shelf',
   'home.bottles': '{count} bottles',
+  'home.bottlesOne': '1 bottle',
   'home.bottleSize': '{status}, {size}',
   'home.startHere': 'Start here',
   'home.stepCatalog': 'Load the recipe book',
