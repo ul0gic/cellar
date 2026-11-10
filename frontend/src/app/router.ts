@@ -3,18 +3,14 @@ import { batch, effect } from '@lightstart/light/signals';
 import { text } from '../text/index.ts';
 import { basePath } from './base.ts';
 import { route } from './controllers/route.ts';
-import { person } from './person.ts';
 import { loadScreen, ScreenLoadError } from './screens.ts';
 import type {
-  LegacyScreenModule,
   Navigate,
   NavigateOptions,
   QueryPatch,
-  QuerySignal,
   RouteDef,
   RouteParams,
   Owner,
-  ScreenContext,
   ScreenElement,
   ScreenKey,
   ScreenModule,
@@ -60,7 +56,6 @@ const blockers = new Set<Blocker>();
 const routeListeners = new Set<() => void>();
 const mountListeners = new Set<() => void>();
 const titleListeners = new Set<() => void>();
-const queryListeners = new Set<() => void>();
 const scrollPositions = new Map<string, number>();
 
 function newKey(): string {
@@ -188,20 +183,7 @@ export function setQuery(patch: QueryPatch, mode: 'replace' | 'push'): void {
   const url = `${location.pathname}${search.length > 0 ? `?${search}` : ''}${location.hash}`;
   writeEntry(url, mode === 'replace', {});
   syncQuery();
-  notify(queryListeners);
 }
-
-export const query: QuerySignal = {
-  get: (key) => route.query.peek().get(key),
-  getAll: (key) => route.query.peek().getAll(key),
-  set: setQuery,
-  subscribe(fn) {
-    queryListeners.add(fn);
-    return () => {
-      queryListeners.delete(fn);
-    };
-  },
-};
 
 function persistScroll(): void {
   try {
@@ -299,7 +281,7 @@ async function allowedToLeave(): Promise<boolean> {
   return true;
 }
 
-function titleOf(match: Match, module: ScreenModule | LegacyScreenModule | null): string {
+function titleOf(match: Match, module: ScreenModule | null): string {
   const title = module?.title ?? match.def.title;
   return typeof title === 'string' ? title : title(match.params);
 }
@@ -312,19 +294,7 @@ function samePlace(a: Match | null, b: Match): boolean {
   return aKeys.length === Object.keys(b.params).length && aKeys.every((key) => a.params[key] === b.params[key]);
 }
 
-function isTagged(module: ScreenModule | LegacyScreenModule): module is ScreenModule {
-  return 'tag' in module;
-}
-
-export function createScreen(
-  key: ScreenKey,
-  module: ScreenModule | LegacyScreenModule,
-  params: RouteParams,
-): HTMLElement {
-  if (!isTagged(module)) {
-    const ctx: ScreenContext = { params, query, navigate, person };
-    return module.screen(ctx);
-  }
+export function createScreen(key: ScreenKey, module: ScreenModule, params: RouteParams): HTMLElement {
   if (customElements.get(module.tag) === undefined) {
     throw new Error(`The ${key} screen did not define <${module.tag}>`);
   }
@@ -333,7 +303,7 @@ export function createScreen(
   return element;
 }
 
-async function moduleFor(match: Match): Promise<{ match: Match; module: ScreenModule | LegacyScreenModule | null }> {
+async function moduleFor(match: Match): Promise<{ match: Match; module: ScreenModule | null }> {
   try {
     const module = await loadScreen(match.def.screen);
     if (module !== null || fallback === null) {
@@ -370,7 +340,6 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
   }
   if (samePlace(current, resolved)) {
     syncQuery();
-    notify(queryListeners);
     if (location.hash.length > 1) {
       scrollToHash(location.hash);
     }
@@ -404,7 +373,6 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
   notify(mountListeners);
   target.append(module === null ? document.createElement('div') : createScreen(match.def.screen, module, match.params));
   notify(routeListeners);
-  notify(queryListeners);
   const saved = scrollPositions.get(currentKey);
   if (scroll === 'restore' && saved !== undefined) {
     restoreScroll(saved);

@@ -1,11 +1,29 @@
 import { html, render } from '@lightstart/light/html';
 import '../screens/launch/not-found.ts';
 import '../screens/launch/offline.ts';
-import { confirm, confirmTyped } from '../design-system/dialogs.ts';
 import { skeleton } from '../design-system/skeleton.ts';
 import { toast } from '../design-system/toast.ts';
 import type { HaveSegment } from '../design-system/cl-have-bar.ts';
 import type { PlateKind } from '../design-system/cl-plate.ts';
+import '../design-system/cl-bulb.ts';
+import '../design-system/cl-figure.ts';
+import '../design-system/cl-have-bar.ts';
+import '../design-system/cl-image-field.ts';
+import '../design-system/cl-ingredient-line.ts';
+import '../design-system/cl-live-card.ts';
+import '../design-system/cl-plate.ts';
+import '../design-system/cl-qr.ts';
+import '../design-system/cl-recipe-card.ts';
+import '../design-system/cl-recipe-row.ts';
+import '../design-system/cl-stacked-bar.ts';
+import '../design-system/cl-status-pill.ts';
+import '../design-system/lc/bar-chart.ts';
+import '../design-system/lc/button.ts';
+import '../design-system/lc/clipboard.ts';
+import '../design-system/lc/form.ts';
+import '../design-system/lc/progress-bar.ts';
+import '../design-system/lc/rating.ts';
+import '../design-system/lc/toast.ts';
 import './demo.css';
 import './pattern.ts';
 
@@ -207,26 +225,6 @@ export function mountDemo(root: HTMLElement): void {
                 @click=${() => toast({ title: 'Made it. That’s 4 times for you.', action: { label: 'Undo', run: () => toast({ title: 'Undone.' }) } })}
               >Toast with an action</lc-button>
               <lc-button variant="quiet" @click=${() => toast({ title: 'Couldn’t save. Cellar didn’t answer.', variant: 'error' })}>Error toast</lc-button>
-              <lc-button
-                variant="quiet"
-                @click=${() =>
-                  void confirm({
-                    title: 'Delete Paper Plane?',
-                    message: 'It’s removed for everyone.',
-                    confirmLabel: 'Delete recipe',
-                    danger: true,
-                  })}
-              >Confirm</lc-button>
-              <lc-button
-                variant="quiet"
-                @click=${() =>
-                  void confirmTyped({
-                    title: 'Replace everything with this backup?',
-                    message: 'Everything added since then is lost, for every member.',
-                    phrase: 'replace everything',
-                    confirmLabel: 'Restore backup',
-                  })}
-              >Typed confirm</lc-button>
             </div>
             ${skeleton('rows', 'Recipes')}
             <cl-image-field purpose="recipe"></cl-image-field>

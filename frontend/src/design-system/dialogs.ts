@@ -20,17 +20,7 @@ export interface ConfirmTypedOptions {
   readonly cancelLabel?: string;
 }
 
-function place(dialog: HTMLElement, host: OverlayHost | null, onRemove: () => void): () => void {
-  if (host === null) {
-    document.body.append(dialog);
-    return () => dialog.remove();
-  }
-  return hostOverlay(host, dialog, onRemove);
-}
-
-export function confirm(...args: [ConfirmOptions] | [OverlayHost, ConfirmOptions]): Promise<boolean> {
-  const host = args.length === 1 ? null : args[0];
-  const opts = args.length === 1 ? args[0] : args[1];
+export function confirm(host: OverlayHost, opts: ConfirmOptions): Promise<boolean> {
   const dialog = document.createElement('lc-alert-dialog');
   dialog.title = opts.title;
   dialog.message = opts.message;
@@ -39,7 +29,7 @@ export function confirm(...args: [ConfirmOptions] | [OverlayHost, ConfirmOptions
   dialog.showCancel = true;
   dialog.confirmVariant = opts.danger === true ? 'danger' : 'default';
   return new Promise((resolve) => {
-    const remove = place(dialog, host, () => resolve(false));
+    const remove = hostOverlay(host, dialog, () => resolve(false));
     const settle = (answer: boolean): void => {
       resolve(answer);
       remove();
@@ -50,9 +40,7 @@ export function confirm(...args: [ConfirmOptions] | [OverlayHost, ConfirmOptions
   });
 }
 
-export function confirmTyped(...args: [ConfirmTypedOptions] | [OverlayHost, ConfirmTypedOptions]): Promise<boolean> {
-  const host = args.length === 1 ? null : args[0];
-  const opts = args.length === 1 ? args[0] : args[1];
+export function confirmTyped(host: OverlayHost, opts: ConfirmTypedOptions): Promise<boolean> {
   const dialog = document.createElement('cl-typed-confirm');
   dialog.heading = opts.title;
   dialog.message = opts.message;
@@ -60,7 +48,7 @@ export function confirmTyped(...args: [ConfirmTypedOptions] | [OverlayHost, Conf
   dialog.confirmLabel = opts.confirmLabel;
   dialog.cancelLabel = opts.cancelLabel ?? text('action.cancel');
   return new Promise((resolve) => {
-    const remove = place(dialog, host, () => resolve(false));
+    const remove = hostOverlay(host, dialog, () => resolve(false));
     dialog.addEventListener(
       'answer',
       (event) => {

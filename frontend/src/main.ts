@@ -1,14 +1,10 @@
 import './app/boot.ts';
 import 'virtual:cellar-light.css';
 import { configureTheme } from '@lightstart/light/theme';
-import { defineCompositions } from './design-system/compositions.ts';
-import { defineLightComponents } from './design-system/light-components.ts';
 import './design-system/styles.ts';
 import { startShell } from './app/shell.ts';
 
 configureTheme({ requestFont: () => undefined });
-defineLightComponents();
-defineCompositions();
 
 const app = document.getElementById('app');
 if (app === null) {

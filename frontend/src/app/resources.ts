@@ -1,5 +1,5 @@
 import type { OperationId } from '@cellar/contract';
-import type { KeyedResource, Resource, ResourceHandle } from '@lightstart/light/controller';
+import type { KeyedResource, Resource } from '@lightstart/light/controller';
 import { keyedResource } from '@lightstart/light/controller/resource';
 import { batch, type Computed, computed, effect, signal, untracked } from '@lightstart/light/signals';
 import { type ApiInput, type ApiOutput, ApiError, call } from './api.ts';
@@ -20,8 +20,6 @@ export type DataDomain =
   | 'notes'
   | 'settings'
   | 'stats';
-
-export type ResourceTag = DataDomain;
 
 export const DATA_CHANGED = 'data:changed';
 
@@ -45,29 +43,9 @@ interface Rebindable {
   reset(reload: boolean): void;
 }
 
-const watchers = new WeakMap<ResourceHandle, number>();
 const layers = new Map<OperationId, unknown>();
 const controls = new Set<LayerControl>();
 const bound = new Set<Rebindable>();
-
-export function hold(handle: ResourceHandle): () => void {
-  watchers.set(handle, (watchers.get(handle) ?? 0) + 1);
-  return () => {
-    watchers.set(handle, (watchers.get(handle) ?? 0) - 1);
-  };
-}
-
-export function resourceFor<Op extends OperationId>(
-  op: Op,
-  input: ApiInput<Op>,
-  opts: { readonly tags?: readonly ResourceTag[] } = {},
-): Resource<ApiOutput<Op>> {
-  const layer = layerFor(op);
-  for (const tag of opts.tags ?? []) {
-    layer.domains.add(tag);
-  }
-  return layer.entry(input).resource;
-}
 
 class Layer<Op extends OperationId> implements LayerControl {
   readonly domains = new Set<DataDomain>();
@@ -98,7 +76,7 @@ class Layer<Op extends OperationId> implements LayerControl {
   }
 
   isHeld(key: string): boolean {
-    return (this.held.get(key) ?? 0) > 0 || (watchers.get(this.keyed.get(key)) ?? 0) > 0;
+    return (this.held.get(key) ?? 0) > 0;
   }
 
   entry(input: ApiInput<Op>): { readonly key: string; readonly resource: Resource<ApiOutput<Op>> } {
@@ -315,8 +293,6 @@ export function dataChanged(...domains: readonly DataDomain[]): void {
     }
   }
 }
-
-export const invalidate = dataChanged;
 
 export function resetReads(reload: boolean): void {
   for (const control of controls) {

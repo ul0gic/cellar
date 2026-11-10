@@ -1,68 +1,20 @@
 import { formatMoney } from '@cellar/contract';
-import type { ResourceHandle } from '@lightstart/light/controller';
-import { html, nothing, type TemplateResult } from '@lightstart/light/html';
+import { html, type TemplateResult } from '@lightstart/light/html';
 import { effect, type Signal } from '@lightstart/light/signals';
 import { call } from '../../../app/api.ts';
 import { eventChecked } from '../../../app/events.ts';
-import { type WatchState, onLeave } from '../../../app/load.ts';
 import { actionFailed } from '../../../app/problems.ts';
 import { route } from '../../../app/controllers/route.ts';
 import { session } from '../../../app/controllers/session.ts';
 import { dataChanged } from '../../../app/resources.ts';
 import { setQuery } from '../../../app/router.ts';
 import type { Owner } from '../../../app/types.ts';
-import { illustration } from '../../../design-system/illustration.ts';
-import { type SkeletonShape, skeleton } from '../../../design-system/skeleton.ts';
 import { text } from '../../../text/index.ts';
-import '../../../design-system/lc/button.ts';
-import '../../../design-system/lc/empty-state.ts';
 import '../../../design-system/lc/modal.ts';
 import '../../../design-system/lc/switch.ts';
 import './kit.css';
 
 const TYPE_SETTLE_MS = 250;
-
-export const wide = matchMedia('(min-width: 1024px)');
-
-export function onWidth(element: HTMLElement, fn: () => void): void {
-  wide.addEventListener('change', fn);
-  onLeave(element, () => wide.removeEventListener('change', fn));
-}
-
-export function follow(element: HTMLElement, subscribe: (fn: () => void) => () => void, fn: () => void): void {
-  let mounted = false;
-  const stop = subscribe(() => {
-    if (element.isConnected) {
-      mounted = true;
-    } else if (mounted) {
-      stop();
-      return;
-    }
-    fn();
-  });
-}
-
-export function failedState(screen: string, retry: () => void): TemplateResult {
-  return html`<lc-empty-state title=${text('loadFailed.title', { screen })} description=${text('loadFailed.body')}>
-    ${illustration('empty-lost')}
-    <lc-button variant="primary" @click=${retry}>${text('loadFailed.retry')}</lc-button>
-  </lc-empty-state>`;
-}
-
-export function waiting(
-  state: WatchState,
-  resource: ResourceHandle,
-  screen: string,
-  shape: SkeletonShape,
-): TemplateResult | typeof nothing | HTMLElement | null {
-  if (resource.peek() !== undefined) {
-    return null;
-  }
-  if (state.error(resource) !== null) {
-    return failedState(screen, state.retry);
-  }
-  return state.slow ? skeleton(shape, screen) : nothing;
-}
 
 export function attempt(action: () => Promise<void>): Promise<void> {
   return action().catch((error: unknown) => actionFailed(error, () => void attempt(action)));
