@@ -1,5 +1,5 @@
 import type { ImageRef } from '@cellar/contract';
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { navigation } from '@lightstart/light/navigation';
 import { html, nothing } from '@lightstart/light/html';
 import T from '@lightstart/light/types';
@@ -8,8 +8,10 @@ import type { HaveSegment } from './cl-have-bar.ts';
 import { plateForGlass } from './cl-plate.ts';
 import { ratingInline } from './cl-rating-inline.ts';
 import { thumbHashDataUrl } from './thumbhash.ts';
-import './cl-recipe-card.css';
 import { typedDefault } from './typed-default.ts';
+import './cl-status-pill.ts';
+import './lc/icon.ts';
+import './lc/image.ts';
 
 const NO_SEGMENTS = typedDefault<readonly HaveSegment[]>([]);
 const NO_IMAGE = typedDefault<ImageRef | null>(null);
@@ -80,3 +82,11 @@ export const clRecipeCard = defineComponent({
     `;
   },
 });
+
+View.define(clRecipeCard);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-recipe-card': ComponentElement<typeof clRecipeCard>;
+  }
+}

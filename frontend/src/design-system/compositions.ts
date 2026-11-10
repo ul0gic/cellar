@@ -2,7 +2,7 @@ import View from '@lightstart/light';
 import { clBulb } from './cl-bulb.ts';
 import { clFigure } from './cl-figure.ts';
 import { clHaveBar } from './cl-have-bar.ts';
-import { clImageField, registerImageField } from './cl-image-field.ts';
+import { clImageField } from './cl-image-field.ts';
 import { clIngredientLine } from './cl-ingredient-line.ts';
 import { clLiveCard } from './cl-live-card.ts';
 import { clPlate } from './cl-plate.ts';
@@ -27,5 +27,4 @@ export function defineCompositions(): void {
   View.define(clStackedBar);
   View.define(clTypedConfirm);
   View.define(clImageField);
-  registerImageField();
 }

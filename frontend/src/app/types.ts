@@ -44,7 +44,24 @@ export interface ScreenContext {
   readonly person: PersonSignal;
 }
 
-export interface ScreenModule {
+export interface LegacyScreenModule {
   readonly screen: (ctx: ScreenContext) => HTMLElement;
   readonly title?: string | ((params: RouteParams) => string);
+}
+
+export interface ScreenModule {
+  readonly tag: string;
+  readonly title?: string | ((params: RouteParams) => string);
+}
+
+export interface ScreenElement extends HTMLElement {
+  params: RouteParams;
+}
+
+export interface Owner {
+  $own(teardown: () => void): unknown;
+}
+
+export interface OverlayHost extends Owner {
+  readonly isConnected: boolean;
 }

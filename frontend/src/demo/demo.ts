@@ -1,14 +1,13 @@
 import { html, render } from '@lightstart/light/html';
-import { screen as notFound } from '../screens/launch/not-found.ts';
-import { screen as offline } from '../screens/launch/offline.ts';
-import { query, navigate } from '../app/router.ts';
-import { person } from '../app/person.ts';
+import '../screens/launch/not-found.ts';
+import '../screens/launch/offline.ts';
 import { confirm, confirmTyped } from '../design-system/dialogs.ts';
 import { skeleton } from '../design-system/skeleton.ts';
 import { toast } from '../design-system/toast.ts';
 import type { HaveSegment } from '../design-system/cl-have-bar.ts';
 import type { PlateKind } from '../design-system/cl-plate.ts';
 import './demo.css';
+import './pattern.ts';
 
 const PLATES: readonly PlateKind[] = [
   'coupe',
@@ -59,10 +58,6 @@ const FORM_FIELDS = [
 ];
 
 const FORM_DATA = { lines: [{ ingredient: 'Bourbon' }, { ingredient: 'Lemon juice' }] };
-
-function ctxScreen(make: typeof notFound): HTMLElement {
-  return make({ params: { path: '/recipez' }, query, navigate, person });
-}
 
 export function mountDemo(root: HTMLElement): void {
   document.getElementById('launch')?.remove();
@@ -239,8 +234,12 @@ export function mountDemo(root: HTMLElement): void {
 
           <section aria-labelledby="demo-screens">
             <h2 id="demo-screens">Launch screens</h2>
-            ${ctxScreen(notFound)}
-            <div class="cl-demo-offline">${offline()}</div>
+            <cl-screen-launch-not-found .params=${{ path: '/recipez' }}></cl-screen-launch-not-found>
+            <div class="cl-demo-offline"><cl-screen-launch-offline></cl-screen-launch-offline></div>
+          </section>
+          <section aria-labelledby="demo-pattern">
+            <h2 id="demo-pattern">Pattern page</h2>
+            <cl-demo-pattern></cl-demo-pattern>
           </section>
         </main>
         <lc-toast position="bottom-center"></lc-toast>

@@ -3,7 +3,7 @@ import type { SearchDoc } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventChecked, eventNumber } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import { setAppBar } from '../../app/shell.ts';
@@ -149,7 +149,7 @@ export function screen(): HTMLElement {
           </p>
           <ul class="cl-kit-list cl-kit-panel">${current.items.map(row)}</ul>`;
 
-  const draw = (state: LoadState): void => {
+  const draw = (state: WatchState): void => {
     const current = list.peek();
     const lines = current === undefined ? '' : linesOf(current);
     clipboard.text = lines;

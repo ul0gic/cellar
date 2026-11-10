@@ -2,16 +2,27 @@ import type { LightElements } from '@lightstart/components/elements.js';
 import { env } from '@lightstart/light/env';
 import { navigation } from '@lightstart/light/navigation';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
+import { effect, untracked } from '@lightstart/light/signals';
 import { prefersReducedMotion } from '../design-system/motion.ts';
 import { type TextKey, text } from '../text/index.ts';
 import { type AuthCode, ApiError, call, onAuthProblem, onReachabilityChange } from './api.ts';
-import { person } from './person.ts';
-import { hold, resourceFor } from './resources.ts';
-import { FALLBACK_PATH, href, navigate, query, router } from './router.ts';
+import { route } from './controllers/route.ts';
+import { session } from './controllers/session.ts';
+import { shell } from './controllers/shell.ts';
+import { viewport } from './controllers/viewport.ts';
+import { createScreen, FALLBACK_PATH, href, navigate, router } from './router.ts';
 import { routes } from './routes.ts';
 import { loadScreen } from './screens.ts';
 import type { SessionPerson } from './types.ts';
 import './shell.css';
+import '../design-system/cl-bulb.ts';
+import '../design-system/lc/app-header.ts';
+import '../design-system/lc/app-shell.ts';
+import '../design-system/lc/bottom-nav.ts';
+import '../design-system/lc/dropdown.ts';
+import '../design-system/lc/icon.ts';
+import '../design-system/lc/navbar.ts';
+import '../design-system/lc/toast.ts';
 
 type Dropdown = LightElements['lc-dropdown'];
 
@@ -26,8 +37,6 @@ interface NavLink {
   readonly label: TextKey;
   readonly icon: string;
 }
-
-const WIDE_QUERY = '(min-width: 1024px)';
 
 const TABS: readonly NavLink[] = [
   { path: '/', label: 'nav.home', icon: 'house' },
@@ -56,14 +65,11 @@ export const MORE_PAGES: readonly NavLink[] = [
   { path: '/import', label: 'nav.importExport', icon: 'upload' },
 ];
 
-const wide = matchMedia(WIDE_QUERY);
 const outlet = document.createElement('div');
 outlet.className = 'cl-outlet';
 let root: HTMLElement | null = null;
 let appBar: AppBarOptions = {};
 let started = false;
-let shoppingCount = 0;
-let menuLive = false;
 let overlay: HTMLElement | null = null;
 let searchDialog: HTMLElement | null = null;
 let searchOpener: Element | null = null;
@@ -102,10 +108,10 @@ function keycap(): string {
   return env.os === 'macos' || env.os === 'ios' ? '⌘ K' : 'Ctrl K';
 }
 
-export async function signOut(session: SessionPerson): Promise<void> {
+export async function signOut(who: SessionPerson): Promise<void> {
   await call('logout', {});
-  await person.refresh();
-  navigate(session.requireLogin ? '/login' : '/who', { replace: true });
+  await session.refresh();
+  navigate(who.requireLogin ? '/login' : '/who', { replace: true });
 }
 
 function openDropdown(event: MouseEvent, selector: string): void {
@@ -116,13 +122,13 @@ function openDropdown(event: MouseEvent, selector: string): void {
   }
 }
 
-function topBar(session: SessionPerson): TemplateResult {
+function topBar(who: SessionPerson): TemplateResult {
   const accountItems = [
     { label: text('nav.settings'), icon: 'sliders-horizontal', onClick: () => navigate('/settings/profile') },
     {
-      label: session.requireLogin ? text('nav.signOut') : text('nav.switchPerson'),
+      label: who.requireLogin ? text('nav.signOut') : text('nav.switchPerson'),
       icon: 'log-out',
-      onClick: () => void signOut(session),
+      onClick: () => void signOut(who),
     },
   ];
   const moreItems = MORE_PAGES.map((page) => ({
@@ -136,7 +142,7 @@ function topBar(session: SessionPerson): TemplateResult {
       ${TOP_NAV.map(
         (link) => html`<a href=${href(link.path)} aria-current=${isCurrent(link.path) ? 'page' : nothing}
           >${text(link.label)}${
-            link.path === '/menus' && menuLive
+            link.path === '/menus' && shell.menuLive.value
               ? html`<cl-bulb size="dot" status="on" label=${text('nav.menuLive')}></cl-bulb>`
               : nothing
           }</a
@@ -162,7 +168,7 @@ function topBar(session: SessionPerson): TemplateResult {
         class="cl-account-button"
         aria-haspopup="menu"
         @click=${(event: MouseEvent) => openDropdown(event, '.cl-account-menu')}
-      ><lc-icon name="user-round" aria-hidden="true"></lc-icon><span class="cl-vh">${text('nav.account', { name: session.person.name })}</span></button>
+      ><lc-icon name="user-round" aria-hidden="true"></lc-icon><span class="cl-vh">${text('nav.account', { name: who.person.name })}</span></button>
       <lc-dropdown class="cl-account-menu" aria-label=${text('nav.accountMenu')} .items=${accountItems}></lc-dropdown>
     </div>
   `;
@@ -193,9 +199,9 @@ function tabBar(): TemplateResult {
           <lc-icon name=${tab.icon} aria-hidden="true"></lc-icon>
           <span>${text(tab.label)}</span>
           ${
-            tab.path === '/list' && shoppingCount > 0
-              ? html`<span class="cl-badge" aria-label=${text('nav.shoppingCount', { count: shoppingCount })}
-                  >${shoppingCount}</span
+            tab.path === '/list' && shell.shoppingCount.value > 0
+              ? html`<span class="cl-badge" aria-label=${text('nav.shoppingCount', { count: shell.shoppingCount.value })}
+                  >${shell.shoppingCount.value}</span
                 >`
               : nothing
           }
@@ -206,19 +212,19 @@ function tabBar(): TemplateResult {
 }
 
 function chrome(): TemplateResult {
-  const route = router.current();
-  const session = person.current();
-  const kind = route?.def.shell ?? 'bare';
+  const def = route.def.peek();
+  const who = session.current.value;
+  const kind = def?.shell ?? 'bare';
   const page = html`<div class=${kind === 'bare' ? 'cl-page cl-page-bare' : 'cl-page'}>${outlet}</div>`;
   if (kind === 'print') {
     return html`<main class="cl-print">${outlet}</main>`;
   }
-  if (session === null || (route?.def.access === 'public' && route.def.path !== FALLBACK_PATH)) {
+  if (who === null || (def?.access === 'public' && def.path !== FALLBACK_PATH)) {
     return html`<main class="cl-bare">${outlet}</main>`;
   }
-  if (wide.matches) {
+  if (viewport.wide.value) {
     return html`<lc-app-shell layout="desktop" class="cl-shell">
-      <lc-navbar slot="navbar">${topBar(session)}</lc-navbar>
+      <lc-navbar slot="navbar">${topBar(who)}</lc-navbar>
       ${page}
     </lc-app-shell>`;
   }
@@ -243,7 +249,7 @@ function draw(): void {
   render(
     html`
       ${chrome()}
-      <lc-toast position=${wide.matches ? 'bottom-right' : 'bottom-center'}></lc-toast>
+      <lc-toast position=${viewport.wide.value ? 'bottom-right' : 'bottom-center'}></lc-toast>
       ${overlay ?? nothing}
       ${searchDialog ?? nothing}
     `,
@@ -265,15 +271,15 @@ function hideLaunch(): void {
 }
 
 function redirectFor(code: AuthCode): void {
-  const route = router.current();
-  if (route === null) {
+  const def = route.def.peek();
+  if (def === null) {
     pendingAuth = code;
     return;
   }
   const path = appPath();
   const here = `${path}${location.search}`;
   const next = here === '/' ? '' : `?next=${encodeURIComponent(here)}`;
-  const leaving = route.def.access !== 'public' && !SIGN_IN_PATHS.includes(path);
+  const leaving = def.access !== 'public' && !SIGN_IN_PATHS.includes(path);
   switch (code) {
     case 'setup_required':
       if (path !== '/setup') {
@@ -298,23 +304,6 @@ function redirectFor(code: AuthCode): void {
   }
 }
 
-function watchCounts(): void {
-  const shopping = resourceFor('getShoppingList', {}, { tags: ['shopping'] });
-  shopping.subscribe((list) => {
-    shoppingCount = list?.items.length ?? 0;
-    draw();
-  });
-  const menus = resourceFor('listMenus', { query: { pageSize: 1 } }, { tags: ['menus'] });
-  menus.subscribe((page) => {
-    menuLive = page?.items.some((menu) => menu.live) ?? false;
-    draw();
-  });
-  hold(shopping);
-  hold(menus);
-  void shopping.ensure();
-  void menus.ensure();
-}
-
 function startRouter(): void {
   if (started) {
     return;
@@ -328,12 +317,12 @@ async function showOverlay(key: 'launch/offline' | 'launch/splash' | 'launch/los
   if (module === null) {
     throw new Error(`The ${key} screen is missing`);
   }
-  overlay = module.screen({ params: { screen: text('app.name') }, query, navigate, person });
+  overlay = createScreen(key, module, { screen: text('app.name') });
   draw();
 }
 
 async function openSearch(): Promise<void> {
-  if (searchDialog !== null || overlay !== null || person.current() === null) {
+  if (searchDialog !== null || overlay !== null || session.current.peek() === null) {
     return;
   }
   const opener = document.activeElement;
@@ -341,7 +330,7 @@ async function openSearch(): Promise<void> {
   if (module === null || searchDialog !== null) {
     return;
   }
-  const dialog = module.screen({ params: {}, query, navigate, person });
+  const dialog = createScreen('search/dialog', module, {});
   dialog.addEventListener('cl-dismiss', closeSearch);
   searchOpener = opener;
   searchDialog = dialog;
@@ -363,7 +352,7 @@ function closeSearch(): void {
 
 async function refreshed(): Promise<boolean> {
   try {
-    await person.refresh();
+    await session.refresh();
     return true;
   } catch (error) {
     if (!(error instanceof ApiError)) {
@@ -397,20 +386,24 @@ export async function startShell(target: HTMLElement): Promise<void> {
   root = target;
   target.addEventListener('popover-open', (event) => blurForMenu(event, true));
   target.addEventListener('popover-close', (event) => blurForMenu(event, false));
-  wide.addEventListener('change', draw);
   router.beforeMount(() => {
     appBar = {};
     root?.classList.remove('cl-menu-open');
     closeSearch();
+    draw();
   });
-  router.subscribe(draw);
   onAuthProblem(redirectFor);
-  person.subscribe((session) => {
-    if (session !== null) {
-      if (!countsWatched) {
-        countsWatched = true;
-        watchCounts();
-      }
+  router.subscribe(draw);
+  effect(() => {
+    const followed = {
+      session: session.current.value,
+      wide: viewport.wide.value,
+      shopping: shell.shoppingCount.value,
+      live: shell.menuLive.value,
+    };
+    if (followed.session !== null && !countsWatched) {
+      countsWatched = true;
+      untracked(() => shell.follow());
     }
     draw();
   });
@@ -423,7 +416,7 @@ export async function startShell(target: HTMLElement): Promise<void> {
     void showOverlay('launch/offline');
   });
   document.addEventListener('keydown', (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && person.current() !== null) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && session.current.peek() !== null) {
       event.preventDefault();
       void openSearch();
     }
@@ -437,7 +430,6 @@ export async function startShell(target: HTMLElement): Promise<void> {
       redirectFor(code);
     }
   });
-  draw();
   if (await refreshed()) {
     startRouter();
   }

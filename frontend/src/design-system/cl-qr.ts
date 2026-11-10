@@ -1,8 +1,7 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import { encode } from 'uqr';
 import { text } from '../text/index.ts';
-import './cl-qr.css';
 
 function modulePath(rows: readonly (readonly boolean[])[]): string {
   const parts: string[] = [];
@@ -34,3 +33,11 @@ export const clQr = defineComponent({
     ><path d=${modulePath(data)}></path></svg>`;
   },
 });
+
+View.define(clQr);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-qr': ComponentElement<typeof clQr>;
+  }
+}

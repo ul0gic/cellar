@@ -3,7 +3,7 @@ import type { LightElements } from '@lightstart/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
@@ -43,7 +43,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   let errors: FieldError[] = [];
   let saving = false;
   let gotItem: WishlistItem | null = null;
-  let state: LoadState | null = null;
+  let state: WatchState | null = null;
   const redraw = (): void => {
     if (state !== null) {
       draw(state);
@@ -329,7 +329,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </lc-modal>`;
   };
 
-  const draw = (current: LoadState): void => {
+  const draw = (current: WatchState): void => {
     state = current;
     const data = lists.peek();
     const ordered = data === undefined ? [] : [...data.lists].sort((a, b) => Number(b.mine) - Number(a.mine));

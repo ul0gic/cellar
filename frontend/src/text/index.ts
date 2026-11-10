@@ -16,16 +16,25 @@ const strings: ReadonlyMap<string, string> = new Map([
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
-export function text(key: TextKey, vars?: TextVars): string {
-  const template = strings.get(key);
-  if (template === undefined) {
-    throw new Error(`No string for text key ${key}`);
-  }
+function fill(template: string, vars: Readonly<Record<string, unknown>> | undefined): string {
   if (vars === undefined) {
     return template;
   }
   return template.replace(PLACEHOLDER, (placeholder, name: string) => {
     const value = vars[name];
-    return value === undefined ? placeholder : String(value);
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : placeholder;
   });
+}
+
+export function lookupText(key: string, vars?: Readonly<Record<string, unknown>>): string | undefined {
+  const template = strings.get(key);
+  return template === undefined ? undefined : fill(template, vars);
+}
+
+export function text(key: TextKey, vars?: TextVars): string {
+  const found = lookupText(key, vars);
+  if (found === undefined) {
+    throw new Error(`No string for text key ${key}`);
+  }
+  return found;
 }

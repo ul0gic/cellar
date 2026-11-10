@@ -1,13 +1,14 @@
 import { IMAGE_ASPECT, IMAGE_PURPOSES, type ImagePurpose, LIMITS } from '@cellar/contract';
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import type { LightElements } from '@lightstart/components/elements.js';
 import { registerFormFieldRenderer } from '@lightstart/components/form/field-renderers.js';
 import { html } from '@lightstart/light/html';
 import T from '@lightstart/light/types';
 import { text } from '../text/index.ts';
 import { thumbHashOf } from './thumbhash.ts';
-import './cl-image-field.css';
 import { typedDefault } from './typed-default.ts';
+import './lc/button.ts';
+import './lc/image-crop.ts';
 
 export interface ImageUpload {
   readonly file: Blob;
@@ -28,8 +29,6 @@ export function outputSize(purpose: ImagePurpose): { width: number; height: numb
 }
 
 const RECIPE = typedDefault<ImagePurpose>('recipe');
-const NO_CHANGE: ((upload: ImageUpload) => void) | null = null;
-
 export const clImageField = defineComponent({
   tag: 'cl-image-field',
   style: true,
@@ -37,7 +36,7 @@ export const clImageField = defineComponent({
     purpose: RECIPE,
     ready: false,
     error: '',
-    change: T.function({ defaultValue: NO_CHANGE, attribute: false }),
+    change: T.function({ defaultValue: null, attribute: false }),
   },
   async _use() {
     const crop = this.querySelector<CropElement>('lc-image-crop');
@@ -89,15 +88,21 @@ export const clImageField = defineComponent({
   },
 });
 
-export function registerImageField(): void {
-  registerFormFieldRenderer('image', (field, _value, onChange, template) => {
-    const purpose = IMAGE_PURPOSES.find((candidate) => candidate === field.purpose);
-    if (purpose === undefined) {
-      throw new Error(`The image field ${field.name} needs a purpose: ${IMAGE_PURPOSES.join(', ')}`);
-    }
-    return template`<cl-image-field
+View.define(clImageField);
+
+registerFormFieldRenderer('image', (field, _value, onChange, template) => {
+  const purpose = IMAGE_PURPOSES.find((candidate) => candidate === field.purpose);
+  if (purpose === undefined) {
+    throw new Error(`The image field ${field.name} needs a purpose: ${IMAGE_PURPOSES.join(', ')}`);
+  }
+  return template`<cl-image-field
       purpose=${purpose}
       .change=${(upload: ImageUpload) => onChange(upload)}
     ></cl-image-field>`;
-  });
+});
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-image-field': ComponentElement<typeof clImageField>;
+  }
 }

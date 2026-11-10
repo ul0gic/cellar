@@ -1,6 +1,5 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html, nothing } from '@lightstart/light/html';
-import './cl-bulb.css';
 import { typedDefault } from './typed-default.ts';
 
 export type BulbStatus = 'on' | 'via' | 'off' | 'optional';
@@ -27,3 +26,11 @@ export const clBulb = defineComponent({
     ></span>`;
   },
 });
+
+View.define(clBulb);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-bulb': ComponentElement<typeof clBulb>;
+  }
+}

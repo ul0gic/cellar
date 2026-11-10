@@ -2,7 +2,7 @@ import { type Collection, LIMITS, type RecipeSummary } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
@@ -37,7 +37,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     return element;
   }
   const source = resourceFor('getCollection', { params: { id } }, { tags: ['collections', 'recipes', 'shelf'] });
-  let loadState: LoadState | null = null;
+  let loadState: WatchState | null = null;
 
   const reorder = async (recipeIds: readonly number[]): Promise<void> => {
     try {

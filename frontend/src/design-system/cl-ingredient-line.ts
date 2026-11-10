@@ -6,14 +6,15 @@ import {
   type PreferredUnit,
   type SubstitutionEffect,
 } from '@cellar/contract';
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { navigation } from '@lightstart/light/navigation';
 import { html, type TemplateResult } from '@lightstart/light/html';
 import T from '@lightstart/light/types';
 import { text } from '../text/index.ts';
 import type { BulbStatus } from './cl-bulb.ts';
-import './cl-ingredient-line.css';
 import { typedDefault } from './typed-default.ts';
+import './cl-bulb.ts';
+import './lc/icon.ts';
 
 type AmountColumns =
   | { readonly kind: 'word'; readonly word: string }
@@ -135,3 +136,11 @@ export const clIngredientLine = defineComponent({
     `;
   },
 });
+
+View.define(clIngredientLine);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-ingredient-line': ComponentElement<typeof clIngredientLine>;
+  }
+}

@@ -59,3 +59,59 @@
     position: absolute;
   }
 }
+
+.cl-demo-sheet {
+  position: fixed;
+  inset-inline: var(--gutter);
+  bottom: var(--space-4);
+  z-index: var(--z-toast);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+}
+
+.cl-demo-form lc-form {
+  display: block;
+}
+
+.cl-demo-form lc-form form {
+  --lc-form-gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  column-gap: var(--space-3);
+}
+
+.cl-demo-form .form-field.cl-demo-wide {
+  grid-column: 1 / -1;
+}
+
+.cl-demo-form .form-hint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.cl-demo-form .cl-kit-sheet-footer {
+  grid-column: 1 / -1;
+}
+
+.cl-demo-form .form-field.cl-demo-tight {
+  margin-top: calc(var(--space-3) - var(--space-4));
+}
+
+.cl-demo-form .form-field.cl-demo-image {
+  gap: var(--space-3);
+}
+
+.cl-demo-form .form-field.cl-demo-gap {
+  gap: var(--space-3);
+}
+
+.cl-demo-form h1 {
+  margin: 0;
+}
+
+.cl-demo-form .form-field.cl-demo-hint {
+  --lc-form-field-gap: var(--space-1);
+}

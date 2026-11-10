@@ -1,6 +1,7 @@
 import { html, render, type TemplateResult } from '@lightstart/light/html';
 import { text } from '../text/index.ts';
 import { prefersReducedMotion } from './motion.ts';
+import './lc/skeleton.ts';
 
 export type SkeletonShape = 'cards' | 'rows' | 'figure' | 'lines';
 

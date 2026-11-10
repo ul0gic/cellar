@@ -155,3 +155,9 @@
     padding: 0;
   }
 }
+
+.cl-recipe-form .form-field > lc-label {
+  --lc-label-margin: initial;
+  --lc-label-font-weight: initial;
+  --lc-label-line-height: initial;
+}

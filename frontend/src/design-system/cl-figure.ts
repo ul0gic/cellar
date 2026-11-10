@@ -1,8 +1,7 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import { formatNumber } from '../text/format.ts';
 import { countUp } from './motion.ts';
-import './cl-figure.css';
 import { typedDefault } from './typed-default.ts';
 
 export type FigureSize = 'page' | 'hero' | 'hero-wide' | 'stat';
@@ -46,3 +45,11 @@ export const clFigure = defineComponent({
     `;
   },
 });
+
+View.define(clFigure);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-figure': ComponentElement<typeof clFigure>;
+  }
+}

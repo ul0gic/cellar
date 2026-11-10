@@ -202,13 +202,13 @@ export function screen(ctx: ScreenContext): HTMLElement {
                 size="hero"
                 value=${data.canMake.total}
                 label=${catalogMissing ? text('home.noCatalogLabel') : text('home.emptyLabel')}
-                .countUp=${arrival}
+                ?count-up=${arrival}
               ></cl-figure>`
             : html`<cl-figure
                 size="hero"
                 value=${data.canMake.count}
                 label=${text('home.canMakeLabel')}
-                .countUp=${arrival}
+                ?count-up=${arrival}
               >
                 ${
                   missingOne > 0

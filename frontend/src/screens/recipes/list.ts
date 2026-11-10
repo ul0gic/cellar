@@ -3,7 +3,7 @@ import type { DropdownItem, TableColumn, TableRow } from '@lightstart/components
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type LoadState, onLeave, type Watched, watch } from '../../app/load.ts';
+import { type WatchState, onLeave, type Watched, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
@@ -104,7 +104,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     const items = value === undefined ? [] : 'collections' in value ? value.collections : value.items;
     return items.find((item) => String(item.id) === id)?.name ?? '';
   };
-  let loadState: LoadState | null = null;
+  let loadState: WatchState | null = null;
 
   const toggleFavorite = async (recipe: RecipeSummary): Promise<void> => {
     try {

@@ -1,6 +1,6 @@
 import type { Stats } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import type { ScreenContext } from '../../app/types.ts';
@@ -34,7 +34,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   element.className = 'cl-kit-screen cl-stats';
   const stats = resourceFor('getStats', {}, { tags: ['stats', 'shelf', 'shopping', 'wishlists', 'notes'] });
   const asTable = new Set<ChartId>();
-  let state: LoadState | null = null;
+  let state: WatchState | null = null;
 
   const currency = (): string => {
     const session = ctx.person.current();
@@ -284,7 +284,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     `;
   };
 
-  const draw = (current: LoadState): void => {
+  const draw = (current: WatchState): void => {
     state = current;
     const data = stats.peek();
     render(

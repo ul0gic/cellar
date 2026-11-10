@@ -3,7 +3,7 @@ import type { LightElements } from '@lightstart/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventChecked, eventField, eventPage, eventText } from '../../app/events.ts';
-import { type LoadState, type Watched, watch } from '../../app/load.ts';
+import { type WatchState, type Watched, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
 import { today } from '../../app/today.ts';
@@ -88,7 +88,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   let typed = ctx.query.get('q') ?? '';
   let typeTimer: ReturnType<typeof setTimeout> | null = null;
   let watched: Watched | null = null;
-  let state: LoadState | null = null;
+  let state: WatchState | null = null;
   const redraw = (): void => {
     if (state !== null) {
       draw(state);
@@ -601,7 +601,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
       >`,
     });
 
-  const body = (current: LoadState): TemplateResult | HTMLElement | typeof nothing | null => {
+  const body = (current: WatchState): TemplateResult | HTMLElement | typeof nothing | null => {
     const list = listFor();
     const pending = waiting(current, list, text('nav.shelf'), 'rows');
     const page = list.peek();
@@ -617,7 +617,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     `;
   };
 
-  function draw(current: LoadState): void {
+  function draw(current: WatchState): void {
     state = current;
     render(
       html`

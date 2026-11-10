@@ -1,7 +1,6 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import { text } from '../text/index.ts';
-import './cl-have-bar.css';
 import { typedDefault } from './typed-default.ts';
 
 export type HaveSegment = 'on' | 'via' | 'off';
@@ -54,3 +53,11 @@ export const clHaveBar = defineComponent({
     `;
   },
 });
+
+View.define(clHaveBar);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-have-bar': ComponentElement<typeof clHaveBar>;
+  }
+}

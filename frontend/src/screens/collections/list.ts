@@ -2,7 +2,7 @@ import { LIMITS } from '@cellar/contract';
 import { html, nothing, render } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
@@ -19,7 +19,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   const element = document.createElement('section');
   element.className = 'cl-collections';
   const list = resourceFor('listCollections', {}, { tags: ['collections'] });
-  let loadState: LoadState | null = null;
+  let loadState: WatchState | null = null;
 
   const create = (): void => {
     let name = '';

@@ -1,13 +1,14 @@
 import type { ImageRef } from '@cellar/contract';
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { navigation } from '@lightstart/light/navigation';
 import { html, nothing } from '@lightstart/light/html';
 import type { HaveSegment } from './cl-have-bar.ts';
 import { plateForGlass } from './cl-plate.ts';
 import { ratingInline } from './cl-rating-inline.ts';
 import { thumbHashDataUrl } from './thumbhash.ts';
-import './cl-recipe-row.css';
 import { typedDefault } from './typed-default.ts';
+import './cl-have-bar.ts';
+import './lc/image.ts';
 
 const NO_SEGMENTS = typedDefault<readonly HaveSegment[]>([]);
 const NO_IMAGE = typedDefault<ImageRef | null>(null);
@@ -47,3 +48,11 @@ export const clRecipeRow = defineComponent({
     `;
   },
 });
+
+View.define(clRecipeRow);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-recipe-row': ComponentElement<typeof clRecipeRow>;
+  }
+}

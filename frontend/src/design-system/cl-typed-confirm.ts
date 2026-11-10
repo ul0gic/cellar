@@ -1,9 +1,10 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import type { LightElements } from '@lightstart/components/elements.js';
 import T from '@lightstart/light/types';
 import { text } from '../text/index.ts';
-import './cl-typed-confirm.css';
+import './lc/button.ts';
+import './lc/modal.ts';
 
 type Modal = LightElements['lc-modal'];
 
@@ -77,3 +78,11 @@ export const clTypedConfirm = defineComponent({
     `;
   },
 });
+
+View.define(clTypedConfirm);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-typed-confirm': ComponentElement<typeof clTypedConfirm>;
+  }
+}

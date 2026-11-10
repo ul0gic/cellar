@@ -9,7 +9,7 @@ import {
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
 import { eventText } from '../../../app/events.ts';
-import { type LoadState, watch } from '../../../app/load.ts';
+import { type WatchState, watch } from '../../../app/load.ts';
 import { actionFailed } from '../../../app/problems.ts';
 import { resourceFor } from '../../../app/resources.ts';
 import { setScreenTitle } from '../../../app/router.ts';
@@ -57,7 +57,7 @@ export function calculatorScreen(ctx: ScreenContext, selectedId: number | null):
   let values: Record<string, number | null> = {};
   let shownId: number | null = null;
   let saving = false;
-  let loadState: LoadState | null = null;
+  let loadState: WatchState | null = null;
 
   const selected = (): Calculator | null => {
     const calculators = list.peek()?.calculators ?? [];

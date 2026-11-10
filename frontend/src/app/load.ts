@@ -1,18 +1,59 @@
 import type { ResourceHandle } from '@lightstart/light/controller';
+import { type Computed, computed } from '@lightstart/light/signals';
 import { ApiError } from './api.ts';
-import { hold } from './resources.ts';
+import { hold, SKELETON_DELAY_MS } from './resources.ts';
 import { router } from './router.ts';
-
-// D-1 §8.26: skeletons appear only when a response takes longer than 300 ms.
-const SKELETON_DELAY_MS = 300;
 
 export type LoadPhase = 'loading' | 'slow' | 'failed' | 'ready';
 
+export interface LoadSource {
+  readonly value: { readonly value: unknown; peek(): unknown };
+  readonly error: Computed<ApiError | null>;
+  readonly slow: Computed<boolean>;
+  refresh(): Promise<void>;
+}
+
 export interface LoadState {
+  readonly phase: Computed<LoadPhase>;
+  readonly error: Computed<ApiError | null>;
+  retry(): void;
+}
+
+export interface WatchState {
   readonly phase: LoadPhase;
   readonly slow: boolean;
   error(resource: ResourceHandle): ApiError | null;
   retry(): void;
+}
+
+export function loadState(resources: readonly LoadSource[]): LoadState {
+  const missing = (): readonly LoadSource[] => resources.filter((source) => source.value.value === undefined);
+  const phase = computed<LoadPhase>(() => {
+    const waiting = missing();
+    if (waiting.length === 0) {
+      return 'ready';
+    }
+    if (waiting.some((source) => source.error.value !== null)) {
+      return 'failed';
+    }
+    return waiting.some((source) => source.slow.value) ? 'slow' : 'loading';
+  });
+  return {
+    phase,
+    error: computed(() => {
+      if (phase.value !== 'failed') {
+        return null;
+      }
+      return missing().find((source) => source.error.value !== null)?.error.value ?? null;
+    }),
+    retry: () => {
+      for (const source of resources) {
+        if (source.error.peek() !== null) {
+          void source.refresh();
+        }
+      }
+    },
+  };
 }
 
 export interface Watched {
@@ -62,7 +103,7 @@ function shownThroughSignal(error: unknown): void {
 export function watch(
   element: HTMLElement,
   resources: readonly ResourceHandle[],
-  draw: (state: LoadState) => void,
+  draw: (state: WatchState) => void,
 ): Watched {
   const retrying = new Set<ResourceHandle>();
   const stops: (() => void)[] = [];
@@ -72,7 +113,7 @@ export function watch(
 
   const errorOf = (resource: ResourceHandle): ApiError | null => (retrying.has(resource) ? null : apiErrorOf(resource));
 
-  const state: LoadState = {
+  const state: WatchState = {
     get phase() {
       if (resources.every((resource) => resource.peek() !== undefined)) {
         return 'ready';

@@ -1,16 +1,22 @@
 import { configureNavigation } from '@lightstart/light/navigation';
+import { batch, effect } from '@lightstart/light/signals';
 import { text } from '../text/index.ts';
 import { basePath } from './base.ts';
+import { route } from './controllers/route.ts';
 import { person } from './person.ts';
 import { loadScreen, ScreenLoadError } from './screens.ts';
 import type {
+  LegacyScreenModule,
   Navigate,
   NavigateOptions,
   QueryPatch,
   QuerySignal,
   RouteDef,
   RouteParams,
+  Owner,
   ScreenContext,
+  ScreenElement,
+  ScreenKey,
   ScreenModule,
 } from './types.ts';
 
@@ -31,12 +37,6 @@ interface Match {
   readonly params: RouteParams;
 }
 
-export interface CurrentRoute {
-  readonly def: RouteDef;
-  readonly params: RouteParams;
-  readonly query: QuerySignal;
-}
-
 export const FALLBACK_PATH = '*';
 export const LOST_PATH = '!lost';
 const SCROLL_STORE_KEY = 'cellar.scroll';
@@ -50,6 +50,7 @@ let outlet: HTMLElement | null = null;
 let current: Match | null = null;
 let currentKey = '';
 let currentIndex = 0;
+let currentSearch = '';
 let generation = 0;
 let keySequence = 0;
 let ignoreNextPop = false;
@@ -103,12 +104,12 @@ function decodeSegment(segment: string): string | null {
   }
 }
 
-function matchRoute(route: CompiledRoute, parts: readonly string[]): Match | null {
-  if (route.segments.length !== parts.length) {
+function matchRoute(entry: CompiledRoute, parts: readonly string[]): Match | null {
+  if (entry.segments.length !== parts.length) {
     return null;
   }
   const params: Record<string, string> = {};
-  for (const [index, segment] of route.segments.entries()) {
+  for (const [index, segment] of entry.segments.entries()) {
     const part = parts[index];
     if (part === undefined) {
       return null;
@@ -125,20 +126,20 @@ function matchRoute(route: CompiledRoute, parts: readonly string[]): Match | nul
     }
     params[segment.name] = value;
   }
-  return { def: route.def, params };
+  return { def: entry.def, params };
 }
 
-function staticWeight(route: CompiledRoute): number {
-  return route.segments.reduce((weight, segment, index) => (segment.param ? weight : weight + 2 ** (31 - index)), 0);
+function staticWeight(entry: CompiledRoute): number {
+  return entry.segments.reduce((weight, segment, index) => (segment.param ? weight : weight + 2 ** (31 - index)), 0);
 }
 
 function resolvePath(appPath: string): Match | null {
   const parts = appPath.split('/').filter((part) => part.length > 0);
   let best: { match: Match; weight: number } | null = null;
-  for (const route of compiled) {
-    const match = matchRoute(route, parts);
+  for (const entry of compiled) {
+    const match = matchRoute(entry, parts);
     if (match !== null) {
-      const weight = staticWeight(route);
+      const weight = staticWeight(entry);
       if (best === null || weight > best.weight) {
         best = { match, weight };
       }
@@ -160,25 +161,35 @@ function notify(listeners: ReadonlySet<() => void>): void {
   }
 }
 
-export const query: QuerySignal = {
-  get: (key) => readQuery().get(key),
-  getAll: (key) => readQuery().getAll(key),
-  set(patch: QueryPatch, mode) {
-    const next = readQuery();
-    for (const [key, value] of Object.entries(patch)) {
-      next.delete(key);
-      if (value === null) {
-        continue;
-      }
-      for (const item of typeof value === 'string' ? [value] : value) {
-        next.append(key, item);
-      }
+function syncQuery(): void {
+  if (location.search !== currentSearch) {
+    currentSearch = location.search;
+    route.query.value = readQuery();
+  }
+}
+
+export function setQuery(patch: QueryPatch, mode: 'replace' | 'push'): void {
+  const next = readQuery();
+  for (const [key, value] of Object.entries(patch)) {
+    next.delete(key);
+    if (value === null) {
+      continue;
     }
-    const search = next.toString();
-    const url = `${location.pathname}${search.length > 0 ? `?${search}` : ''}${location.hash}`;
-    writeEntry(url, mode === 'replace', {});
-    notify(queryListeners);
-  },
+    for (const item of typeof value === 'string' ? [value] : value) {
+      next.append(key, item);
+    }
+  }
+  const search = next.toString();
+  const url = `${location.pathname}${search.length > 0 ? `?${search}` : ''}${location.hash}`;
+  writeEntry(url, mode === 'replace', {});
+  syncQuery();
+  notify(queryListeners);
+}
+
+export const query: QuerySignal = {
+  get: (key) => route.query.peek().get(key),
+  getAll: (key) => route.query.peek().getAll(key),
+  set: setQuery,
   subscribe(fn) {
     queryListeners.add(fn);
     return () => {
@@ -283,7 +294,7 @@ async function allowedToLeave(): Promise<boolean> {
   return true;
 }
 
-function titleOf(match: Match, module: ScreenModule | null): string {
+function titleOf(match: Match, module: ScreenModule | LegacyScreenModule | null): string {
   const title = module?.title ?? match.def.title;
   return typeof title === 'string' ? title : title(match.params);
 }
@@ -296,11 +307,28 @@ function samePlace(a: Match | null, b: Match): boolean {
   return aKeys.length === Object.keys(b.params).length && aKeys.every((key) => a.params[key] === b.params[key]);
 }
 
-function context(match: Match): ScreenContext {
-  return { params: match.params, query, navigate, person };
+function isTagged(module: ScreenModule | LegacyScreenModule): module is ScreenModule {
+  return 'tag' in module;
 }
 
-async function moduleFor(match: Match): Promise<{ match: Match; module: ScreenModule | null }> {
+export function createScreen(
+  key: ScreenKey,
+  module: ScreenModule | LegacyScreenModule,
+  params: RouteParams,
+): HTMLElement {
+  if (!isTagged(module)) {
+    const ctx: ScreenContext = { params, query, navigate, person };
+    return module.screen(ctx);
+  }
+  if (customElements.get(module.tag) === undefined) {
+    throw new Error(`The ${key} screen did not define <${module.tag}>`);
+  }
+  const element: ScreenElement = Object.assign(document.createElement(module.tag), { params });
+  element.classList.add('cl-screen');
+  return element;
+}
+
+async function moduleFor(match: Match): Promise<{ match: Match; module: ScreenModule | LegacyScreenModule | null }> {
   try {
     const module = await loadScreen(match.def.screen);
     if (module !== null || fallback === null) {
@@ -336,6 +364,7 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
     return;
   }
   if (samePlace(current, resolved)) {
+    syncQuery();
     notify(queryListeners);
     if (location.hash.length > 1) {
       scrollToHash(location.hash);
@@ -348,10 +377,16 @@ async function render(scroll: 'top' | 'restore'): Promise<void> {
   if (run !== generation) {
     return;
   }
+  target.replaceChildren();
   current = match;
+  batch(() => {
+    route.def.value = match.def;
+    route.params.value = match.params;
+    syncQuery();
+  });
   setScreenTitle(titleOf(match, module));
   notify(mountListeners);
-  target.replaceChildren(module === null ? document.createElement('div') : module.screen(context(match)));
+  target.append(module === null ? document.createElement('div') : createScreen(match.def.screen, module, match.params));
   notify(routeListeners);
   notify(queryListeners);
   const saved = scrollPositions.get(currentKey);
@@ -471,6 +506,24 @@ export function href(path: string): string {
   return `${basePath()}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+export function blockWhile(host: Owner, dirty: () => boolean, ask: () => boolean | Promise<boolean>): void {
+  let release: (() => void) | null = null;
+  const watcher = effect(() => {
+    const wanted = dirty();
+    if (wanted && release === null) {
+      release = router.block(ask);
+    } else if (!wanted && release !== null) {
+      release();
+      release = null;
+    }
+  });
+  host.$own(() => {
+    watcher.dispose();
+    release?.();
+    release = null;
+  });
+}
+
 export const router = {
   start(table: readonly RouteDef[], target: HTMLElement): void {
     compiled = table.filter((def) => def.path !== FALLBACK_PATH && def.path !== LOST_PATH).map(compile);
@@ -521,9 +574,6 @@ export const router = {
         window.removeEventListener('beforeunload', onBeforeUnload);
       }
     };
-  },
-  current(): CurrentRoute | null {
-    return current === null ? null : { def: current.def, params: current.params, query };
   },
   subscribe(fn: () => void): () => void {
     routeListeners.add(fn);

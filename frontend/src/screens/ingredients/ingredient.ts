@@ -3,7 +3,7 @@ import type { LightElements } from '@lightstart/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventField, eventText } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
 import { today } from '../../app/today.ts';
@@ -87,7 +87,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   let noteVisibility: Visibility = ctx.person.current()?.person.defaultVisibility ?? 'household';
   let noteError = '';
   let titled = false;
-  let state: LoadState | null = null;
+  let state: WatchState | null = null;
   const redraw = (): void => {
     if (state !== null) {
       draw(state);
@@ -534,7 +534,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     ${noteSheet(item)}
   `;
 
-  const draw = (current: LoadState): void => {
+  const draw = (current: WatchState): void => {
     state = current;
     const item = ingredient.peek();
     if (item !== undefined && !titled) {

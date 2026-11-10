@@ -2,7 +2,7 @@ import { LIMITS, type MenuSummary } from '@cellar/contract';
 import type { LightElements } from '@lightstart/components/elements.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
@@ -112,7 +112,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </li>`;
   };
 
-  const body = (load: LoadState, page: { items: readonly MenuSummary[] } | undefined): TemplateResult => {
+  const body = (load: WatchState, page: { items: readonly MenuSummary[] } | undefined): TemplateResult => {
     if (load.phase === 'failed') {
       return html`<lc-empty-state
         title=${text('loadFailed.title', { screen: text('menus.title') })}
@@ -146,7 +146,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     `;
   };
 
-  const draw = (load: LoadState, page: { items: readonly MenuSummary[] } | undefined): void => {
+  const draw = (load: WatchState, page: { items: readonly MenuSummary[] } | undefined): void => {
     const empty = load.phase !== 'failed' && page !== undefined && page.items.length === 0;
     render(
       html`

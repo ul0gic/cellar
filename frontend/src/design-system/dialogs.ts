@@ -1,4 +1,8 @@
+import type { OverlayHost } from '../app/types.ts';
 import { text } from '../text/index.ts';
+import './cl-typed-confirm.ts';
+import { hostOverlay } from './overlay.ts';
+import './lc/alert-dialog.ts';
 
 export interface ConfirmOptions {
   readonly title: string;
@@ -16,7 +20,17 @@ export interface ConfirmTypedOptions {
   readonly cancelLabel?: string;
 }
 
-export function confirm(opts: ConfirmOptions): Promise<boolean> {
+function place(dialog: HTMLElement, host: OverlayHost | null, onRemove: () => void): () => void {
+  if (host === null) {
+    document.body.append(dialog);
+    return () => dialog.remove();
+  }
+  return hostOverlay(host, dialog, onRemove);
+}
+
+export function confirm(...args: [ConfirmOptions] | [OverlayHost, ConfirmOptions]): Promise<boolean> {
+  const host = args.length === 1 ? null : args[0];
+  const opts = args.length === 1 ? args[0] : args[1];
   const dialog = document.createElement('lc-alert-dialog');
   dialog.title = opts.title;
   dialog.message = opts.message;
@@ -25,34 +39,36 @@ export function confirm(opts: ConfirmOptions): Promise<boolean> {
   dialog.showCancel = true;
   dialog.confirmVariant = opts.danger === true ? 'danger' : 'default';
   return new Promise((resolve) => {
+    const remove = place(dialog, host, () => resolve(false));
     const settle = (answer: boolean): void => {
-      dialog.remove();
       resolve(answer);
+      remove();
     };
     dialog.addEventListener('confirm', () => settle(true), { once: true });
     dialog.addEventListener('cancel', () => settle(false), { once: true });
-    document.body.append(dialog);
     dialog.open = true;
   });
 }
 
-export function confirmTyped(opts: ConfirmTypedOptions): Promise<boolean> {
+export function confirmTyped(...args: [ConfirmTypedOptions] | [OverlayHost, ConfirmTypedOptions]): Promise<boolean> {
+  const host = args.length === 1 ? null : args[0];
+  const opts = args.length === 1 ? args[0] : args[1];
   const dialog = document.createElement('cl-typed-confirm');
-  dialog.setAttribute('heading', opts.title);
-  dialog.setAttribute('message', opts.message);
-  dialog.setAttribute('phrase', opts.phrase);
-  dialog.setAttribute('confirm-label', opts.confirmLabel);
-  dialog.setAttribute('cancel-label', opts.cancelLabel ?? text('action.cancel'));
+  dialog.heading = opts.title;
+  dialog.message = opts.message;
+  dialog.phrase = opts.phrase;
+  dialog.confirmLabel = opts.confirmLabel;
+  dialog.cancelLabel = opts.cancelLabel ?? text('action.cancel');
   return new Promise((resolve) => {
+    const remove = place(dialog, host, () => resolve(false));
     dialog.addEventListener(
       'answer',
       (event) => {
-        dialog.remove();
         resolve(event instanceof CustomEvent && event.detail?.confirmed === true);
+        remove();
       },
       { once: true },
     );
-    document.body.append(dialog);
-    dialog.setAttribute('open', '');
+    dialog.open = true;
   });
 }

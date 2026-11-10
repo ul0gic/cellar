@@ -1,9 +1,9 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import { text } from '../text/index.ts';
 import { type HaveSegment, type HaveSummary, haveSummary, haveText } from './cl-have-bar.ts';
-import './cl-status-pill.css';
 import { typedDefault } from './typed-default.ts';
+import './cl-bulb.ts';
 
 const NO_SEGMENTS = typedDefault<readonly HaveSegment[]>([]);
 
@@ -37,3 +37,11 @@ export const clStatusPill = defineComponent({
     `;
   },
 });
+
+View.define(clStatusPill);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-status-pill': ComponentElement<typeof clStatusPill>;
+  }
+}

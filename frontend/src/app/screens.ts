@@ -1,10 +1,10 @@
-import type { ScreenKey, ScreenModule } from './types.ts';
+import type { LegacyScreenModule, ScreenKey, ScreenModule } from './types.ts';
 
-const modules = import.meta.glob<ScreenModule>(['../screens/*/*.ts', '!../screens/*/text.ts']);
+const modules = import.meta.glob<ScreenModule | LegacyScreenModule>(['../screens/*/*.ts', '!../screens/*/text.ts']);
 
 export class ScreenLoadError extends Error {}
 
-export async function loadScreen(key: ScreenKey): Promise<ScreenModule | null> {
+export async function loadScreen(key: ScreenKey): Promise<ScreenModule | LegacyScreenModule | null> {
   const load = modules[`../screens/${key}.ts`];
   if (load === undefined) {
     return null;

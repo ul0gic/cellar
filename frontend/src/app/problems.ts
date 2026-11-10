@@ -1,3 +1,4 @@
+import type { FieldError } from '@cellar/contract';
 import { toast } from '../design-system/toast.ts';
 import { text } from '../text/index.ts';
 import { AUTH_CODES, ApiError } from './api.ts';
@@ -26,6 +27,25 @@ export function problemText(error: ApiError): string {
 
 export function fieldError(error: ApiError, path: string): string {
   return error.fields.find((field) => field.path === path)?.message ?? '';
+}
+
+export interface FormErrors {
+  readonly fields: Readonly<Record<string, string>>;
+  readonly rest: readonly FieldError[];
+}
+
+export function formErrors(error: ApiError, names: readonly string[]): FormErrors {
+  const fields: Record<string, string> = {};
+  const rest: FieldError[] = [];
+  for (const field of error.fields) {
+    const name = [field.path, field.path.split('.', 1)[0]].find((candidate) => names.includes(candidate));
+    if (name === undefined) {
+      rest.push(field);
+    } else if (!(name in fields)) {
+      fields[name] = field.message;
+    }
+  }
+  return { fields, rest };
 }
 
 export function isAuthProblem(error: ApiError): boolean {

@@ -9,7 +9,7 @@ import {
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { ApiError, call } from '../../app/api.ts';
 import { eventText } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
@@ -120,7 +120,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
   let errors: FieldError[] = [];
   let saving = false;
   let uploading = false;
-  let state: LoadState | null = null;
+  let state: WatchState | null = null;
   const redraw = (): void => {
     if (state !== null) {
       draw(state);
@@ -385,7 +385,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </form>
   `;
 
-  const draw = (current: LoadState): void => {
+  const draw = (current: WatchState): void => {
     state = current;
     if (draft === null) {
       if (existing === null) {

@@ -1,9 +1,8 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import T from '@lightstart/light/types';
 import { formatNumber } from '../text/format.ts';
 import { text } from '../text/index.ts';
-import './cl-stacked-bar.css';
 import { typedDefault } from './typed-default.ts';
 
 export interface StackedItem {
@@ -79,3 +78,11 @@ export const clStackedBar = defineComponent({
     `;
   },
 });
+
+View.define(clStackedBar);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-stacked-bar': ComponentElement<typeof clStackedBar>;
+  }
+}

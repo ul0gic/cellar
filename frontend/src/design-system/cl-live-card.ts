@@ -1,8 +1,10 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html } from '@lightstart/light/html';
 import { navigation } from '@lightstart/light/navigation';
 import { text } from '../text/index.ts';
-import './cl-live-card.css';
+import './cl-bulb.ts';
+import './lc/button.ts';
+import './lc/icon.ts';
 
 export const clLiveCard = defineComponent({
   tag: 'cl-live-card',
@@ -26,3 +28,11 @@ export const clLiveCard = defineComponent({
     `;
   },
 });
+
+View.define(clLiveCard);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-live-card': ComponentElement<typeof clLiveCard>;
+  }
+}

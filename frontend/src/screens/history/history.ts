@@ -2,7 +2,7 @@ import type { BottleSummary, IsoDate } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventPage } from '../../app/events.ts';
-import { type LoadState, watch } from '../../app/load.ts';
+import { type WatchState, watch } from '../../app/load.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import type { ScreenContext } from '../../app/types.ts';
 import { illustration } from '../../design-system/illustration.ts';
@@ -144,7 +144,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     ></cl-figure>`;
   };
 
-  const draw = (state: LoadState): void => {
+  const draw = (state: WatchState): void => {
     const list = listFor();
     const page = list.peek();
     const pending = waiting(state, list, text('nav.history'), 'rows');

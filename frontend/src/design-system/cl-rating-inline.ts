@@ -1,5 +1,6 @@
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { text } from '../text/index.ts';
+import './lc/icon.ts';
 
 const oneDecimal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 

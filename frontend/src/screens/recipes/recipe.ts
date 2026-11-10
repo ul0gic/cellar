@@ -3,7 +3,7 @@ import type { DropdownItem } from '@lightstart/components/types.js';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventChecked, eventNumber, eventText } from '../../app/events.ts';
-import { type LoadState, onLeave, watch } from '../../app/load.ts';
+import { type WatchState, onLeave, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href, setScreenTitle } from '../../app/router.ts';
@@ -249,7 +249,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
 
   const onVisible = (): void => void acquireWake();
 
-  let loadState: LoadState | null = null;
+  let loadState: WatchState | null = null;
 
   const toggleFavorite = async (current: Recipe): Promise<void> => {
     try {

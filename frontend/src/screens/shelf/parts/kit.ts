@@ -3,7 +3,7 @@ import type { ResourceHandle } from '@lightstart/light/controller';
 import { html, nothing, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../../app/api.ts';
 import { eventChecked } from '../../../app/events.ts';
-import { type LoadState, onLeave } from '../../../app/load.ts';
+import { type WatchState, onLeave } from '../../../app/load.ts';
 import { actionFailed } from '../../../app/problems.ts';
 import { invalidate } from '../../../app/resources.ts';
 import type { PersonSignal } from '../../../app/types.ts';
@@ -40,7 +40,7 @@ export function failedState(screen: string, retry: () => void): TemplateResult {
 }
 
 export function waiting(
-  state: LoadState,
+  state: WatchState,
   resource: ResourceHandle,
   screen: string,
   shape: SkeletonShape,

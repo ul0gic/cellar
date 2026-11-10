@@ -2,7 +2,7 @@ import type { IngredientNode, IngredientSummary } from '@cellar/contract';
 import { html, nothing, render, type TemplateResult } from '@lightstart/light/html';
 import { call } from '../../app/api.ts';
 import { eventPage, eventText } from '../../app/events.ts';
-import { type LoadState, type Watched, watch } from '../../app/load.ts';
+import { type WatchState, type Watched, watch } from '../../app/load.ts';
 import { actionFailed } from '../../app/problems.ts';
 import { invalidate, resourceFor } from '../../app/resources.ts';
 import { href } from '../../app/router.ts';
@@ -254,7 +254,7 @@ export function screen(ctx: ScreenContext): HTMLElement {
     </lc-empty-state>`;
   };
 
-  const draw = (state: LoadState): void => {
+  const draw = (state: WatchState): void => {
     const nodes = tree.peek()?.nodes;
     const filter = filterOf(ctx.query.get('filter'));
     const category = idOf(ctx.query.get('category'));

@@ -1,7 +1,6 @@
-import { defineComponent } from '@lightstart/light';
+import View, { type ComponentElement, defineComponent } from '@lightstart/light';
 import { html, unsafeHTML } from '@lightstart/light/html';
 import { text } from '../text/index.ts';
-import './cl-plate.css';
 import { typedDefault } from './typed-default.ts';
 
 export type PlateKind =
@@ -68,3 +67,11 @@ export const clPlate = defineComponent({
     return html`<span part="cl-plate-art" role="img" aria-label=${text('plate.noPhoto', { name: this.name })}>${unsafeHTML(drawing)}</span>`;
   },
 });
+
+View.define(clPlate);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'cl-plate': ComponentElement<typeof clPlate>;
+  }
+}
