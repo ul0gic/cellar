@@ -7,13 +7,13 @@
     "@lightstart/components": "github:ul0gic/lightstart#5ea1f8132e7185a7a86b634386307de635a687e1",
     "@lightstart/light": "github:ul0gic/lightstart#42f98a1cceb11baaa6c78a1cbac7db30669e18be",
     "@cellar/contract": "workspace:*",
-    "@iconify-json/lucide": "1.2.152",
+    "@iconify-json/lucide": "1.2.154",
     "tailwindcss": "4.3.5",
     "thumbhash": "0.1.1",
     "uqr": "0.1.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.5",
-    "vite": "8.3.6"
+    "vite": "8.3.8"
   }
 }

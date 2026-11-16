@@ -18,7 +18,7 @@
     "docker:build": "docker build --build-arg CELLAR_VERSION=$(node -p \"require('./backend/package.json').version\") -t cellar:dev ."
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.6",
+    "@biomejs/biome": "2.6.7",
     "@seriousme/openapi-schema-validator": "2.11.0",
     "@types/node": "26.6.6",
     "@typescript/typescript6": "6.0.2",
