@@ -58,7 +58,7 @@ Put Cellar behind your reverse proxy at its own host name, forwarding to port `7
 
 ## Development
 
-Requires Node 26.13.0 and pnpm 10.
+Requires Node 26.13.0 and pnpm 12 (the exact version is pinned in `package.json`).
 
 ```sh
 pnpm install

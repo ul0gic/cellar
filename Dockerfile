@@ -1,7 +1,7 @@
 FROM --platform=$BUILDPLATFORM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS build
-RUN npm install -g pnpm@10.22.0
 WORKDIR /src
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install -g --allow-scripts=pnpm "$(node -p "require('./package.json').packageManager")"
 COPY backend/package.json backend/
 COPY catalog/package.json catalog/
 COPY contract/package.json contract/

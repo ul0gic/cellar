@@ -3,3 +3,10 @@ packages:
   - backend
   - contract
   - catalog
+
+autoInstallPeers: false
+engineStrict: true
+peerDependencyRules:
+  ignoreMissing:
+    - "@fastify/swagger"
+    - openapi-types

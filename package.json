@@ -1,8 +1,9 @@
 {
   "name": "cellar",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=26.13.0"
   },
@@ -18,18 +19,10 @@
     "docker:build": "docker build --build-arg CELLAR_VERSION=$(node -p \"require('./backend/package.json').version\") -t cellar:dev ."
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.6",
+    "@biomejs/biome": "2.6.7",
     "@seriousme/openapi-schema-validator": "2.11.0",
     "@types/node": "26.6.6",
     "@typescript/typescript6": "6.0.2",
     "typescript": "7.0.2"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "@fastify/swagger",
-        "openapi-types"
-      ]
-    }
   }
 }
