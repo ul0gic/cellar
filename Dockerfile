@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS build
+FROM --platform=$BUILDPLATFORM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN npm install -g --allow-scripts=pnpm "$(node -p "require('./package.json').packageManager")"
@@ -18,7 +18,7 @@ RUN pnpm deploy --legacy --prod --filter @cellar/backend /stage/backend \
   && ln -s "$(realpath --relative-to="$(dirname "${contract}")" /stage/contract)" "${contract}" \
   && ln -s "$(realpath --relative-to=/stage/contract "$(dirname "$(dirname "${contract}")")")" /stage/contract/node_modules
 
-FROM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS final
+FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS final
 ARG CELLAR_VERSION
 LABEL org.opencontainers.image.version="${CELLAR_VERSION}" \
   org.opencontainers.image.source="https://github.com/ul0gic/cellar"
